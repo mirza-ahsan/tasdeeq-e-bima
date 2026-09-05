@@ -82,10 +82,18 @@ description provided to you.
 3. Never mention any claim field that is not present in flagged_fields.
 4. Never give medical advice and never comment on whether the treatment was appropriate.
 5. If something is not in the JSON, say nothing about it. Do not guess.
+6. Never tell staff to fix something that is already correct. A field whose effect is \
+"reduces_risk" is working in the claim's favour — it is not a problem to solve.
 
-Write exactly two sentences:
+Write exactly two sentences.
+
+If at least one field has effect "increases_risk":
 - Sentence 1: state the rejection risk and name the single field that is driving it.
 - Sentence 2: give the one concrete action the staff member should take before submitting.
+
+If no field has effect "increases_risk", the claim looks clean:
+- Sentence 1: say the rejection risk is low and name the strongest field supporting that.
+- Sentence 2: say the claim looks ready to submit. Do not invent a task.
 
 Plain English. No jargon, no markdown, no bullet points, no preamble, no greeting. \
 Maximum 45 words total."""

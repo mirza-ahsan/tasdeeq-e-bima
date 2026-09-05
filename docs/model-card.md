@@ -9,7 +9,7 @@ during training or calibration.
 |---|---|
 | Task | Predict whether a claim will be rejected before submission, and why |
 | Models | LightGBM binary (risk) + LightGBM multiclass (CARC reason) |
-| Calibration | Isotonic regression on validation, clamped to [2%, 97%] |
+| Calibration | Isotonic on validation, clamped to [2%, 97%] |
 | Decision threshold | 0.23, tuned on validation for F1 |
 | Training claims | 3,612 synthetic (Synthea + rules-based CARC labelling) |
 | Split | 80 / 10 / 10 train / val / test, stratified |

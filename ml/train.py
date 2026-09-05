@@ -23,14 +23,14 @@ from pathlib import Path
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
-from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import accuracy_score, f1_score, precision_recall_fscore_support, roc_auc_score
 from sklearn.model_selection import train_test_split
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from ml.calibration import PROB_CEIL, PROB_FLOOR, predict_proba  # noqa: E402
+from ml.calibration import (PROB_CEIL, PROB_FLOOR, build_calibrator,  # noqa: E402
+                            predict_proba)
 from ml.features import (  # noqa: E402
     ASKABLE_FEATURES, BOOLEAN_FEATURES, CARC_TARGET, CATEGORICAL_FEATURES,
     CONTEXT_FEATURES, DERIVED_DEPENDENCIES, DERIVED_FEATURES, FEATURES, TARGET,
@@ -177,8 +177,7 @@ def main() -> int:
 
     # Calibrate across the same partial-information distribution the loop produces,
     # so the displayed percentage is meaningful mid-conversation, not only at the end.
-    calibrator = IsotonicRegression(out_of_bounds="clip")
-    calibrator.fit(risk.predict(X_val_a), y_val_a)
+    calibrator = build_calibrator().fit(risk.predict(X_val_a), y_val_a)
 
     def p(Xd):
         return predict_proba(risk, calibrator, Xd)

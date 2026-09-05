@@ -214,16 +214,18 @@ for the multiclass CARC head in Phase 3.
 
 | | |
 |---|---|
-| Mean questions, truly approved | **2.93** |
-| Mean questions, truly rejected | **3.74** |
-| Resolved in ≤3 questions | 71% |
+| Mean questions, truly approved | **3.71** |
+| Mean questions, truly rejected | **4.14** |
+| Resolved in ≤3 questions | 67% |
 | Hit the 8-question cap | 4% |
-| Distinct question orders | **65 / 200** |
-| Distinct opening questions | 7 |
-| Low band | 149 claims, 85% genuinely approved |
-| High band | 16 claims, 38% genuinely rejected (base rate 26.5%) |
+| Distinct question orders | **72 / 200** |
+| Low band | 143 claims, 87% genuinely approved |
+| High band | 38% genuinely rejected (base rate 26.5%) |
 
-65 distinct question orders across 200 claims is the evidence for the adaptiveness claim —
+`MIN_QUESTIONS` is **3** — the tool never delivers a verdict on fewer than three answers,
+even when already confident. A verdict from one question reads as glib to a clinic user.
+
+72 distinct question orders across 200 claims is the evidence for the adaptiveness claim —
 it is not a fixed form, and the demo can show two claims being asked different things.
 
 **Problems found and fixed during Phase 4:**
@@ -255,13 +257,17 @@ claims being rejected is the number behaving correctly. Do not "fix" it.
 
 ---
 
-## Phase 5 — Backend API
+## Phase 5 — Backend API ✅ COMPLETE
 
-- [ ] `backend/predictor.py` — load models once at startup; `predict(partial_answers) -> {probability, shap_fields, carc}`
-- [ ] `backend/schemas.py` — Pydantic request/response models
-- [ ] `backend/main.py` — FastAPI app, CORS for the Next.js dev origin
-- [ ] Session state: in-memory dict keyed by `session_id`. No auth, no persistence beyond the process.
-- [ ] SQLite (`backend/feedback.db`) for the "mark this wrong" log only
+- [x] `backend/predictor.py` — built in Phase 4; loads models once at startup
+- [x] `backend/schemas.py` — Pydantic request/response models
+- [x] `backend/main.py` — FastAPI app, CORS for the Next.js dev origin
+- [x] `backend/feedback_store.py` — SQLite log for "mark this wrong"
+- [x] `backend/demo_claims.py` — the two scripted claims
+- [x] Session state: in-memory dict keyed by `session_id`, bounded at 500 with oldest-first eviction. No auth, no persistence beyond the process.
+- [x] Display helpers in `adaptive.py` — `feature_label()` / `value_label()` turn model field names into text a clinic clerk reads
+- [x] Qwen wired into `/result`; fallback path verified
+- [x] `tests/test_api.py` — **9 tests**; full suite now **20 passing**
 
 **Endpoints**
 
@@ -269,13 +275,33 @@ claims being rejected is the number behaving correctly. Do not "fix" it.
 |---|---|---|
 | `POST` | `/api/session/start` | `session_id`, first question, prior risk |
 | `POST` | `/api/session/{id}/answer` | updated risk, next question **or** `done: true` |
-| `GET` | `/api/session/{id}/result` | probability, SHAP fields, CARC code + description, Qwen explanation |
-| `POST` | `/api/feedback` | logs the correction, returns `{ok: true}` |
-| `GET` | `/api/demo/{risky\|clean}` | preloaded answers for the two scripted demo claims |
-| `GET` | `/api/health` | model + Qwen reachability (**never** the key) |
+| `GET` | `/api/session/{id}/result` | probability, SHAP fields, CARC + description, Qwen explanation |
+| `POST` | `/api/feedback` | logs the correction |
+| `GET` | `/api/demo/{risky\|clean}` | starts a session on a scripted claim |
+| `GET` | `/api/demo/{which}/answers` | scripted answers, so the UI can auto-fill |
+| `GET` | `/api/health` | model + Qwen reachability, never the key |
 
-- [ ] Wire `explain_qwen.explain()` into `/result`
-- [ ] Confirm the fallback path renders acceptably (kill the network and check)
+**Verified demo walkthrough**
+
+```
+RISKY: 4 questions | 21% → 38% → 66% [high] | CARC 197
+  "There is a 66% chance this claim will be rejected, mainly because
+   pre-authorisation was not obtained. Please obtain and attach the
+   required pre-authorisation before submitting the claim."
+
+CLEAN: 3 questions | 21% → 19% → 18% [low]  | no CARC
+  "The rejection risk is low at 18%, mainly because all supporting
+   documents are complete. The claim looks ready to submit."
+```
+
+**Problems found and fixed during Phase 5:**
+- **Qwen was inventing work on clean claims.** It read a `reduces_risk` field as a problem and told staff to "ensure all supporting documents are attached" when the documents were already complete. The prompt now branches explicitly on whether any field increases risk, with a standing rule never to ask staff to fix something already correct.
+- **A clean claim was being given a CARC code.** The CARC head is trained on rejected claims only, so its output is meaningless for a claim that looks fine — it was confidently returning "duplicate submission" for a spotless claim. `/result` now withholds the reason code entirely when the band is `low`. A test asserts it.
+- **Calibration was changed and then changed back.** Isotonic's plateaus (76 distinct values, 33% of claims on one) froze the risk gauge across consecutive answers, so Platt scaling was tried. It gave 340 distinct values and marginally better AUC, but collapsed distinct question orders from 72 to 15 and — at every band setting tried — made risky claims resolve *faster* than clean ones. Reverted to isotonic and documented both results in `ml/calibration.py`.
+
+**Finding worth keeping for the pitch:** under smooth calibration, risky claims are genuinely faster to identify than clean claims are to certify. One bad answer clears the high threshold immediately; proving a claim is clean means ruling out every remaining risk factor. The brief's assumption that simple claims resolve fastest holds here only because isotonic's plateau sits just under the low band.
+
+**Known cosmetic limitation:** the risk figure can sit unchanged across consecutive answers (the risky demo path is 21% → 38% → 38% → 38% → 66%). That is honest — those answers genuinely did not move the estimate — but **the UI must show "no change" explicitly rather than pretending to animate**, or it reads as a broken gauge. Phase 6 requirement.
 
 ---
 

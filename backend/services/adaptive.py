@@ -43,7 +43,7 @@ import numpy as np
 from backend.predictor import Predictor, get_predictor
 from ml.features import ASKABLE_FEATURES
 
-MIN_QUESTIONS = 2      # never present a verdict before this many answers
+MIN_QUESTIONS = 3      # never present a verdict before this many answers
 MAX_QUESTIONS = 8      # hard cap, guarantees termination
 MIN_INFO_GAIN = 0.006  # below this, further questions are not earning their keep
 
@@ -256,3 +256,59 @@ class AdaptiveEngine:
 
         return Step(False, p, band, n_answered,
                     self._build_question(best_feature, best_gain))
+
+
+# ---------------------------------------------------------------------------
+# Display helpers — turning model field names into something a clinic clerk reads
+# ---------------------------------------------------------------------------
+
+FEATURE_LABELS: dict[str, str] = {
+    "procedure_category": "Procedure type",
+    "diagnosis_category": "Diagnosis",
+    "insurer_tpa": "Insurer / TPA",
+    "plan_tier": "Plan tier",
+    "pre_auth_obtained": "Pre-authorisation",
+    "documents_complete": "Supporting documents",
+    "days_since_treatment": "Days since treatment",
+    "claim_amount_pkr": "Claim amount",
+    "provider_network_status": "Panel status",
+    "patient_policy_active": "Policy status",
+    "is_emergency": "Emergency visit",
+    "diagnosis_procedure_match": "Diagnosis matches procedure",
+    "is_duplicate_submission": "Duplicate submission",
+    "prior_claims_30d": "Claims in last 30 days",
+    "patient_age": "Patient age",
+    "patient_gender": "Patient gender",
+    "pre_auth_required_for_procedure": "Pre-authorisation required",
+    "amount_vs_procedure_median": "Amount vs typical for procedure",
+    "days_vs_insurer_filing_limit": "Share of filing window used",
+    "insurer_filing_limit_days": "Insurer filing limit",
+}
+
+
+def feature_label(feature: str) -> str:
+    return FEATURE_LABELS.get(feature, feature.replace("_", " ").capitalize())
+
+
+def value_label(feature: str, value: object) -> str:
+    """Human-readable rendering of one answer."""
+    if value is None:
+        return "Not answered"
+    if feature in VALUE_LABELS:
+        return VALUE_LABELS[feature].get(value, str(value))
+    if feature in BOOLEAN_LABELS:
+        return BOOLEAN_LABELS[feature][0 if value else 1]
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if feature == "claim_amount_pkr":
+        return f"PKR {int(value):,}"
+    if feature == "days_since_treatment":
+        return f"{int(value)} days"
+    if feature == "prior_claims_30d":
+        n = int(value)
+        return "None" if n == 0 else f"{n} claim{'s' if n > 1 else ''}"
+    if feature == "patient_age":
+        return f"{int(value)} years"
+    if isinstance(value, float):
+        return f"{value:.2f}"
+    return str(value)
