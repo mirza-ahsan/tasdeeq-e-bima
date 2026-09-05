@@ -73,15 +73,21 @@ Synthea sample CSVs ──► build_dataset.py ──► label_carc.py ──►
 
 ---
 
-## Phase 1 — Data acquisition
+## Phase 1 — Data acquisition ✅ COMPLETE
 
 **Goal:** claim-shaped rows grounded in real clinical logic and a real reason-code vocabulary.
 
-- [ ] Download Synthea sample CSV bundle into `data/raw/` (`synthea_sample_data_csv_latest.zip`)
-- [ ] Confirm the files we need are present: `patients`, `encounters`, `procedures`, `conditions`, `claims`, `claims_transactions`, `payers`, `organizations`
-- [ ] `data/carc_codes.json` — curated subset of **real** X12 CARC codes (table below), each with official wording
-- [ ] Verify every CARC code and its description against the official X12 published list — **do not paraphrase or invent codes**
-- [ ] `docs/data-provenance.md` — one page on what is real (Synthea clinical logic, X12 codes) vs. what is ours (the labeling rules). This is pitch ammunition, not busywork.
+- [x] Download Synthea sample CSV bundle into `data/raw/` — from `.../synthea-sample-data/downloads/latest/` (the `downloads/` path in older docs 404s)
+- [x] Confirm the files we need are present — all 18 tables extracted; 108 patients, 5,571 encounters, 9,421 claims, 15,884 procedures
+- [x] `data/carc_codes.json` — 12 real X12 codes with official wording, plain-English text, trigger condition and staff action
+- [x] Verify every CARC code against the official X12 published list — all 12 verified against x12.org on 2026-09-05
+- [x] `docs/data-provenance.md` — what is real vs. what is ours, plus the production-gap section
+
+**Decisions made during Phase 1** (carry into Phase 2):
+- **Claim grain = encounter.** `encounters.csv` already carries payer, cost, class and provider, so one row per encounter is the natural claim row; `procedures`/`conditions` join on `ENCOUNTER`.
+- **Recency filter: 2018 onward → 4,152 rows.** Synthea simulates whole lifetimes (1942–2026); training on decades-old care patterns is not useful. 2018+ lands in the 2,000–5,000 target.
+- **`carc_codes.json` marks field provenance explicitly** — which values are X12's and which are ours. Do not blur this.
+- Synthea uses **SNOMED CT** (not ICD-10/CPT) for procedures and conditions. Real standard codes either way; describe them accurately in the pitch.
 
 **CARC codes to use** (verify wording against X12 before shipping):
 

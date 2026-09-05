@@ -1,0 +1,102 @@
+{
+  "meta": {
+    "standard": "X12 Claim Adjustment Reason Codes (CARC)",
+    "maintainer": "X12 / Accredited Standards Committee",
+    "source_url": "https://x12.org/codes/claim-adjustment-reason-codes",
+    "verified_on": "2026-09-05",
+    "field_provenance": {
+      "code": "REAL - official X12 code number, verified against the published list",
+      "official_description": "REAL - official X12 wording. Do not paraphrase and present as official.",
+      "plain_english": "OURS - authored for clinic staff who are not billing specialists",
+      "trigger": "OURS - the condition our rules-based labeller uses to assign this code",
+      "staff_action": "OURS - the fix suggested to the user"
+    },
+    "note": "These 12 codes are the subset relevant to a Pakistani private-clinic outpatient context. The full X12 list is far larger; we scope down deliberately rather than modelling codes our synthetic data cannot express."
+  },
+  "codes": [
+    {
+      "code": "197",
+      "official_description": "Precertification/authorization/notification/pre-treatment absent.",
+      "plain_english": "Pre-authorisation was required for this procedure but was not obtained.",
+      "trigger": "pre_auth_required_for_procedure AND pre_auth_obtained == no",
+      "staff_action": "Obtain written pre-authorisation from the insurer and attach it before submitting."
+    },
+    {
+      "code": "29",
+      "official_description": "The time limit for filing has expired.",
+      "plain_english": "This claim was submitted after the insurer's filing deadline.",
+      "trigger": "days_since_treatment > insurer filing limit",
+      "staff_action": "Submit immediately and attach a written explanation for the delay."
+    },
+    {
+      "code": "16",
+      "official_description": "Claim/service lacks information or has submission/billing error(s).",
+      "plain_english": "Required documents or details are missing from the claim.",
+      "trigger": "documents_complete in (partial, missing)",
+      "staff_action": "Complete the missing documents before submitting."
+    },
+    {
+      "code": "11",
+      "official_description": "The diagnosis is inconsistent with the procedure.",
+      "plain_english": "The diagnosis recorded does not match the procedure billed.",
+      "trigger": "diagnosis_procedure_match == false",
+      "staff_action": "Re-check the diagnosis and procedure codes against the case notes."
+    },
+    {
+      "code": "50",
+      "official_description": "These are non-covered services because this is not deemed a 'medical necessity' by the payer.",
+      "plain_english": "The insurer does not consider this treatment medically necessary under this plan.",
+      "trigger": "elective or cosmetic procedure on a basic plan tier",
+      "staff_action": "Attach clinical justification, or confirm coverage with the insurer first."
+    },
+    {
+      "code": "96",
+      "official_description": "Non-covered charge(s). At least one Remark Code must be provided (may be comprised of either the NCPDP Reject Reason Code, or Remittance Advice Remark Code that is not an ALERT.)",
+      "plain_english": "This charge is not covered under the patient's plan.",
+      "trigger": "procedure falls outside the plan tier's coverage list",
+      "staff_action": "Verify plan coverage; bill the patient directly if genuinely excluded."
+    },
+    {
+      "code": "27",
+      "official_description": "Expenses incurred after coverage terminated.",
+      "plain_english": "The patient's policy was not active on the date of treatment.",
+      "trigger": "patient_policy_active == false",
+      "staff_action": "Confirm the policy status on the service date before submitting."
+    },
+    {
+      "code": "18",
+      "official_description": "Exact duplicate claim/service (Use only with Group Code OA except where state workers' compensation regulations requires CO).",
+      "plain_english": "This looks like a claim that has already been submitted.",
+      "trigger": "duplicate submission detected for the same patient, procedure and service date",
+      "staff_action": "Check the submission log before resending."
+    },
+    {
+      "code": "45",
+      "official_description": "Charge exceeds fee schedule/maximum allowable or contracted/legislated fee arrangement.",
+      "plain_english": "The amount billed is above what the insurer allows for this procedure.",
+      "trigger": "amount_vs_procedure_median above threshold",
+      "staff_action": "Re-check the billed amount against the agreed tariff for this insurer."
+    },
+    {
+      "code": "109",
+      "official_description": "Claim/service not covered by this payer/contractor. You must send the claim/service to the correct payer/contractor.",
+      "plain_english": "This provider is outside the insurer's panel, so the claim goes to the wrong payer.",
+      "trigger": "provider_network_status == out_of_network",
+      "staff_action": "Confirm panel status with the insurer, or route the claim to the correct payer."
+    },
+    {
+      "code": "6",
+      "official_description": "The procedure/revenue code is inconsistent with the patient's age.",
+      "plain_english": "This procedure does not match the patient's age group.",
+      "trigger": "procedure restricted to an age band the patient is not in",
+      "staff_action": "Re-check the procedure code and the patient's recorded date of birth."
+    },
+    {
+      "code": "151",
+      "official_description": "Payment adjusted because the payer deems the information submitted does not support this many/frequency of services.",
+      "plain_english": "Too many claims of this type were filed for this patient in a short period.",
+      "trigger": "prior_claims_30d above threshold",
+      "staff_action": "Attach clinical justification for the repeat visits."
+    }
+  ]
+}
