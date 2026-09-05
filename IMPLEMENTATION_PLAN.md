@@ -1,6 +1,6 @@
 # Implementation Plan — Claim Rejection Risk Predictor
 
-**Working checklist for the Alibaba Cloud "AI For Pakistan Future" hackathon.**
+**Working checklist for the Bano Qabil AI hackathon.**
 Tick items as they land. This document is now the single source of truth — it supersedes the
 original `plan.md` (narrative/pitch) and `claim-predictor-project-brief.md` (build brief),
 which have been removed from the repo. Inline `§` citations below refer back to those originals

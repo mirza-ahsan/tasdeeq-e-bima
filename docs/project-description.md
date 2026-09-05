@@ -1,6 +1,6 @@
 # Claim Check — written project description
 
-*Alibaba Cloud "AI For Pakistan Future" hackathon submission.*
+*Bano Qabil AI hackathon submission — Mirza Ahsan Baig and Safee.*
 
 ## The problem
 

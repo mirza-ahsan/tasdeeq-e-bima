@@ -31,11 +31,11 @@ RULE = RGBColor(0xE2, 0xDE, 0xD2)
 
 # (eyebrow, headline, [body lines], [stat (value, label)], note)
 SLIDES: list[dict] = [
-    dict(eyebrow="AI FOR PAKISTAN FUTURE", headline="Claim Check",
+    dict(eyebrow="BANO QABIL AI HACKATHON", headline="Claim Check",
          body=["A spell-checker for insurance claims.",
                "Checks a clinic's claim before it is submitted: how likely it is to be",
                "rejected, which field is the problem, and what to fix."],
-         note="Alibaba Cloud hackathon · LightGBM + SHAP + Qwen"),
+         note="Mirza Ahsan Baig and Safee · LightGBM + SHAP + Qwen on DashScope"),
 
     dict(eyebrow="THE PROBLEM", headline="Rejections are paperwork, not medicine",
          body=["A clinic treats an insured patient, then bills the insurer or TPA.",
