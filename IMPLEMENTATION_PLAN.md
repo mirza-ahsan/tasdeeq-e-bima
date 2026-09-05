@@ -374,27 +374,47 @@ which is what makes this look like a clinical instrument rather than a template.
 
 ## Phase 7 — Demo, deployment, submission
 
-**Demo**
-- [ ] Scripted risky claim → high risk, CARC 197, resolves in ~5–6 questions
-- [ ] Scripted clean claim → low risk, resolves in 2–3 questions (proves it doesn't flag everything)
-- [ ] `docs/demo-script.md` — full walkthrough under 3 minutes, with the data-provenance line delivered *before* judges ask
-- [ ] Rehearse end to end; have screenshots ready as a backup if the network dies
+**Demo** ✅
+- [x] Scripted risky claim → 66%, CARC 197, resolves in 4 questions
+- [x] Scripted clean claim → 18%, no reason code, resolves in 3 questions
+- [x] `docs/demo-script.md` — timed to under 3 minutes, with the data-provenance line
+      delivered *before* judges ask, prepared answers to the six likely questions, and a
+      what-to-do-if-it-breaks section
+- [ ] **Rehearse it end to end** — needs you
 
-**Deployment**
-- [ ] Confirm exact deployment requirements from the official hackathon rulebook
-- [ ] `Dockerfile` (backend) + `Dockerfile` (frontend) + `docker-compose.yml`
-- [ ] Alibaba Cloud ECS instance, security group opened for HTTP
-- [ ] Env vars injected at the platform level — **never** bake `.env` into an image
-- [ ] Nginx reverse proxy; confirm the live URL works from a phone on mobile data
+**Deployment** — prepared, not executed
+- [x] `Dockerfile` (backend, trains models during build), `frontend/Dockerfile` (standalone)
+- [x] `docker-compose.yml`, `.dockerignore` × 2, `output: "standalone"` verified building
+- [x] `docs/deployment.md` — ECS runbook, nginx config, and the five things that will bite
+- [ ] **Confirm requirements from the official rulebook** — needs you
+- [ ] **Build the images and deploy** — needs you; Docker is not installed here, so the
+      container definitions are written but have never been built or run
 
 **Submission package**
-- [ ] Demo video (screen recording + voiceover, follows `docs/demo-script.md`)
-- [ ] Architecture diagram (the flow above, cleaned up)
-- [ ] Written project description — the problem framing, synthetic-data honesty, and
-      differentiators are captured in [Anticipated judge questions](#anticipated-judge-questions)
-      and [Architecture](#architecture) below
-- [ ] Presentation deck — **PPT and PDF**
-- [ ] `README.md` — setup instructions someone else could actually follow
+- [x] `docs/architecture.svg` — offline/runtime lanes, renders cleanly to PNG or PDF
+- [x] `docs/project-description.md` — the written submission
+- [x] `docs/deck.pptx` + `docs/deck.pdf` — 8 slides, generated from one source by
+      `docs/build_deck.py`, so the two formats cannot drift apart
+- [x] `README.md` — setup someone else could actually follow
+- [ ] **Demo video** — needs you; `docs/demo-script.md` is the shot list
+
+**Verification run at the end of this phase:** 33 end-to-end API checks passing (every
+endpoint, both demo claims, six error paths, feedback persistence), 20 pytest tests, `tsc`
+clean, production build clean, both demo claims driven through the real UI in a browser.
+
+**Problems found and fixed during Phase 7:**
+- **Network failures showed the raw browser string "Failed to fetch"**, which tells a user
+  nothing. `lib/api.ts` now catches the network-level failure and names the service and URL
+  it could not reach.
+- The architecture diagram's "loaded once" arrow crossed an annotation label; rerouted.
+
+**Verified working in Phase 7 that had never been exercised:**
+- The blank "Check a claim" path (as opposed to the scripted demos)
+- Number-input questions — typing 75 into "days since treatment" recorded "75 days" and
+  correctly produced CARC 29, since 75 days exceeds every insurer's filing limit
+- The "This prediction is wrong" button, confirmed writing rows to SQLite
+- Light mode, which the development machine's dark-mode extension had been masking
+- Backend-down behaviour: the UI degrades to a clear message rather than a blank screen
 
 ---
 

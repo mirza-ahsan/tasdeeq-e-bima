@@ -3,10 +3,16 @@ import type { Health, Result, Step } from "./types";
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...init?.headers },
+    });
+  } catch {
+    // Network-level failure surfaces as "Failed to fetch", which tells a user nothing.
+    throw new Error(`Could not reach the risk service at ${BASE}.`);
+  }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error(`${res.status} ${res.statusText}${detail ? ` — ${detail}` : ""}`);

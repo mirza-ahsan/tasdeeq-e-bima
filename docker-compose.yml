@@ -1,0 +1,23 @@
+# Local parity with the deployed setup.
+#   docker compose --env-file .env up --build
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      DASHSCOPE_API_KEY:      ${DASHSCOPE_API_KEY:?set DASHSCOPE_API_KEY in .env}
+      DASHSCOPE_BASE_URL:     ${DASHSCOPE_BASE_URL:?set DASHSCOPE_BASE_URL in .env}
+      DASHSCOPE_WORKSPACE_ID: ${DASHSCOPE_WORKSPACE_ID:-}
+      QWEN_MODEL:             ${QWEN_MODEL:-qwen-plus}
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+    ports: ["3000:3000"]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped

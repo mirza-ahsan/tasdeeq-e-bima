@@ -48,3 +48,6 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Deck intermediate (regenerate with docs/build_deck.py; deck.pdf/pptx are committed)
+docs/deck.html

@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 640" width="1040" height="640"
+     font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7d7767"/>
+    </marker>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#1f4b43"/>
+    </marker>
+    <style>
+      .box   { fill:#ffffff; stroke:#cdc7b6; stroke-width:1.2; }
+      .boxk  { fill:#e7efec; stroke:#1f4b43; stroke-width:1.4; }
+      .boxd  { fill:#f3f1ea; stroke:#cdc7b6; stroke-width:1.2; stroke-dasharray:4 3; }
+      .t     { font-size:13.5px; fill:#17150f; }
+      .s     { font-size:11px; fill:#7d7767; }
+      .m     { font-size:11px; fill:#4a463b; font-family:'IBM Plex Mono',monospace; }
+      .lane  { font-size:10.5px; fill:#7d7767; letter-spacing:1.6px; font-family:'IBM Plex Mono',monospace; }
+      .ln    { stroke:#7d7767; stroke-width:1.2; fill:none; marker-end:url(#a); }
+      .lnk   { stroke:#1f4b43; stroke-width:1.4; fill:none; marker-end:url(#a2); }
+      .lnb   { stroke:#7d7767; stroke-width:1.2; fill:none; marker-end:url(#a); marker-start:url(#a); }
+      .rule  { stroke:#e2ded2; stroke-width:1; }
+    </style>
+  </defs>
+  <rect width="1040" height="640" fill="#faf9f6"/>
+
+  <text x="40" y="34" class="t" font-size="17" font-family="Newsreader, Georgia, serif">
+    Claim Rejection Risk Predictor — architecture
+  </text>
+
+  <!-- ============ OFFLINE ============ -->
+  <text x="40" y="72" class="lane">OFFLINE · BUILD TIME</text>
+  <line x1="40" y1="82" x2="1000" y2="82" class="rule"/>
+
+  <rect x="40"  y="100" width="150" height="56" rx="2" class="box"/>
+  <text x="115" y="123" class="t" text-anchor="middle">Synthea</text>
+  <text x="115" y="140" class="s" text-anchor="middle">108 patients · SNOMED</text>
+
+  <rect x="240" y="100" width="160" height="56" rx="2" class="box"/>
+  <text x="320" y="123" class="m" text-anchor="middle">build_dataset.py</text>
+  <text x="320" y="140" class="s" text-anchor="middle">join · PKR · categorise</text>
+
+  <rect x="450" y="100" width="160" height="56" rx="2" class="box"/>
+  <text x="530" y="123" class="m" text-anchor="middle">label_carc.py</text>
+  <text x="530" y="140" class="s" text-anchor="middle">probabilistic rules</text>
+
+  <rect x="660" y="100" width="140" height="56" rx="2" class="box"/>
+  <text x="730" y="123" class="m" text-anchor="middle">train.py</text>
+  <text x="730" y="140" class="s" text-anchor="middle">+ masking</text>
+
+  <rect x="850" y="92" width="150" height="72" rx="2" class="boxk"/>
+  <text x="925" y="114" class="m" text-anchor="middle" fill="#1f4b43">models/</text>
+  <text x="925" y="131" class="s" text-anchor="middle">risk · CARC</text>
+  <text x="925" y="147" class="s" text-anchor="middle">calibrator · metadata</text>
+
+  <rect x="450" y="186" width="160" height="44" rx="2" class="box"/>
+  <text x="530" y="204" class="t" text-anchor="middle">X12 CARC codes</text>
+  <text x="530" y="220" class="s" text-anchor="middle">12 real reason codes</text>
+
+  <line x1="190" y1="128" x2="234" y2="128" class="ln"/>
+  <line x1="400" y1="128" x2="444" y2="128" class="ln"/>
+  <line x1="610" y1="128" x2="654" y2="128" class="ln"/>
+  <line x1="800" y1="128" x2="844" y2="128" class="lnk"/>
+  <line x1="530" y1="186" x2="530" y2="162" class="ln"/>
+
+  <text x="40" y="200" class="s">3,612 claims</text>
+  <text x="40" y="216" class="s">26.5% rejected</text>
+  <text x="40" y="232" class="s">AUC 0.788</text>
+
+  <!-- ============ RUNTIME ============ -->
+  <text x="40" y="296" class="lane">RUNTIME · PER CLAIM</text>
+  <line x1="40" y1="306" x2="1000" y2="306" class="rule"/>
+
+  <rect x="40" y="392" width="160" height="70" rx="2" class="box"/>
+  <text x="120" y="418" class="t" text-anchor="middle">Next.js UI</text>
+  <text x="120" y="435" class="s" text-anchor="middle">one question</text>
+  <text x="120" y="450" class="s" text-anchor="middle">at a time</text>
+
+  <rect x="250" y="392" width="150" height="70" rx="2" class="box"/>
+  <text x="325" y="418" class="m" text-anchor="middle">FastAPI</text>
+  <text x="325" y="435" class="s" text-anchor="middle">session state</text>
+  <text x="325" y="450" class="s" text-anchor="middle">in memory</text>
+
+  <rect x="455" y="330" width="185" height="60" rx="2" class="boxk"/>
+  <text x="547" y="353" class="m" text-anchor="middle" fill="#1f4b43">adaptive.py</text>
+  <text x="547" y="370" class="s" text-anchor="middle">mutual information</text>
+
+  <rect x="455" y="410" width="185" height="60" rx="2" class="box"/>
+  <text x="547" y="433" class="m" text-anchor="middle">predictor.py</text>
+  <text x="547" y="450" class="s" text-anchor="middle">LightGBM + SHAP</text>
+
+  <rect x="455" y="500" width="185" height="60" rx="2" class="box"/>
+  <text x="547" y="523" class="m" text-anchor="middle">explain_qwen.py</text>
+  <text x="547" y="540" class="s" text-anchor="middle">strict prompt</text>
+
+  <rect x="700" y="500" width="200" height="60" rx="2" class="boxk"/>
+  <text x="800" y="523" class="t" text-anchor="middle" fill="#1f4b43">Qwen · DashScope</text>
+  <text x="800" y="540" class="s" text-anchor="middle">OpenAI-compatible API</text>
+
+  <path d="M200 420 L244 420" class="lnb"/>
+  <path d="M400 412 L428 412 L428 360 L449 360" class="ln"/>
+  <path d="M400 442 L449 442" class="ln"/>
+  <path d="M400 452 L428 452 L428 530 L449 530" class="ln"/>
+  <path d="M547 390 L547 404" class="lnb"/>
+  <line x1="640" y1="530" x2="694" y2="530" class="lnk"/>
+  <path d="M640 430 L965 430 L965 176" class="ln" stroke-dasharray="4 3"/>
+  <text x="975" y="284" class="s" text-anchor="end">loaded once,</text>
+  <text x="975" y="299" class="s" text-anchor="end">at startup</text>
+
+  <!-- annotations -->
+  <text x="700" y="352" class="s">asks whichever unanswered field</text>
+  <text x="700" y="368" class="s">would reduce uncertainty most</text>
+  <text x="700" y="452" class="s">probability · flagged fields · CARC</text>
+  <text x="700" y="468" class="s">calibrated, clamped 2–97%</text>
+
+  <line x1="40" y1="596" x2="1000" y2="596" class="rule"/>
+  <text x="40" y="618" class="s">
+    Qwen receives only the computed result and restates it. It cannot change the probability, the reason code, or which fields were flagged.
+  </text>
+</svg>
