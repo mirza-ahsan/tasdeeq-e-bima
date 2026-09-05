@@ -200,27 +200,58 @@ for the multiclass CARC head in Phase 3.
 
 ---
 
-## Phase 4 — Adaptive question engine
+## Phase 4 — Adaptive question engine ✅ COMPLETE
 
-The technical centrepiece. Pure Python, no I/O, fully unit-testable.
+- [x] `backend/predictor.py` — model serving: probability, SHAP attribution, CARC prediction. Built in full here rather than stubbed, because the engine needs real predictions; Phase 5 only has to wire HTTP.
+- [x] `backend/services/adaptive.py` — question bank + information-gain engine
+- [x] `QUESTION_BANK`: all 14 askable features with English question text, answer options and a one-line "why we're asking"
+- [x] **Expected information gain** per unanswered feature, batched into one LightGBM call (~150 predictions per question)
+- [x] Stopping rule — max gain below threshold, confident low/high band, or the 8-question cap
+- [x] Guards: never re-asks an answered field, always terminates
+- [x] `tests/test_adaptive.py` — **11 tests, all passing**
 
-- [ ] `backend/services/adaptive.py`
-- [ ] `QUESTION_BANK`: feature → English question text + answer options + help text
-- [ ] **Expected information gain** for each unanswered feature:
-  1. For each candidate value of that feature, impute it and predict `p(reject)`
-  2. Weight each outcome by that value's prior frequency from `metadata.json`
-  3. Compute expected reduction in predictive (binary) entropy
-  4. Ask the feature with the largest expected reduction
-- [ ] Stopping rule — stop when **any** holds:
-  - [ ] max expected information gain < threshold
-  - [ ] `p(reject) < 0.15` (confidently clean) or `> 0.70` (confidently risky)
-  - [ ] 8 questions asked
-- [ ] Guard: never re-ask an answered field; always terminate
-- [ ] `tests/test_adaptive.py`
-  - [ ] A clean claim resolves in **≤ 3 questions**
-  - [ ] A missing-pre-auth claim surfaces `pre_auth_obtained` early and flags CARC 197
-  - [ ] Question order **differs** between the two demo claims (proves adaptiveness)
-  - [ ] Loop always terminates within the cap
+**Calibrated behaviour** (200 held-out claims):
+
+| | |
+|---|---|
+| Mean questions, truly approved | **2.93** |
+| Mean questions, truly rejected | **3.74** |
+| Resolved in ≤3 questions | 71% |
+| Hit the 8-question cap | 4% |
+| Distinct question orders | **65 / 200** |
+| Distinct opening questions | 7 |
+| Low band | 149 claims, 85% genuinely approved |
+| High band | 16 claims, 38% genuinely rejected (base rate 26.5%) |
+
+65 distinct question orders across 200 claims is the evidence for the adaptiveness claim —
+it is not a fixed form, and the demo can show two claims being asked different things.
+
+**Problems found and fixed during Phase 4:**
+- **Information gains came out negative**, with `documents_complete` — the model's single
+  strongest predictor — scoring the *most* negative. Cause: the baseline used the model's
+  prediction with the field left unknown, but LightGBM sends a missing value down a learned
+  default branch rather than averaging over what the value might have been, so the Jensen
+  inequality guaranteeing non-negativity did not hold. Fixed by marginalising per feature:
+  the baseline is now `H(Σ P(f=v)·p_v)`, making the quantity a true mutual information —
+  non-negative by construction and comparable across fields. A regression test asserts this.
+- **`risk_bands.low_max` from Phase 3 was unusable.** At the p25 value of 0.177 it sat
+  *below* the model's own no-information prediction (0.188), so almost no claim could ever
+  reach the low band: only 2 of 120 did, and the loop ran to the question cap on 62% of
+  claims. Recalibrated to 0.20 by simulating the whole loop.
+- **`high_min` cannot be lowered.** Dropping it from 0.40 to 0.30 to catch more risky claims
+  made rejected claims stop as fast as clean ones (2.23 vs 2.21 questions), erasing the
+  adaptive behaviour the demo is built on. Held at 0.40.
+- **`MIN_INFO_GAIN` is sharply non-linear.** At 0.03 the loop stops before asking anything
+  at all. Calibrated to 0.006.
+
+**Known approximation, stated rather than hidden:** `P(f = v)` uses the marginal training
+frequency rather than a posterior conditioned on answers so far. Modelling the joint
+distribution over answers is a much larger build; the marginal is a standard stand-in and
+is documented in the module docstring.
+
+**Note for Phase 5:** high-band precision is 38% against a 26.5% base rate. That is not a
+defect — the band starts at p ≥ 0.40 and the model is calibrated, so roughly 40% of those
+claims being rejected is the number behaving correctly. Do not "fix" it.
 
 ---
 

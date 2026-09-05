@@ -43,6 +43,17 @@ SEED = 42
 N_MASKED_COPIES = 3      # augmented partial-information copies per training claim
 N_QUANTILE_BINS = 8      # candidate values per numeric feature, for information gain
 
+# Risk band cut-points, calibrated in Phase 4 by simulating the whole question loop over
+# held-out claims rather than taken straight from a quantile. The raw validation quantiles
+# are stored alongside as val_probability_quantiles for reference.
+#
+# low_max was originally p25 (0.177), which sat *below* the model's own no-information
+# prediction (0.188) — almost no claim could ever reach the low band, so the loop ran to
+# the question cap on 62% of claims. high_min must stay at 0.40: dropping it to 0.30 makes
+# risky claims stop as fast as clean ones and erases the adaptive behaviour entirely.
+RISK_BAND_LOW_MAX = 0.20
+RISK_BAND_HIGH_MIN = 0.40
+
 
 def prepare(df: pd.DataFrame) -> pd.DataFrame:
     """Coerce dtypes so LightGBM handles categoricals natively and NaN means unknown."""
@@ -258,7 +269,7 @@ def main() -> int:
                                     "imaging", "nursing_hospice"],
         },
         "decision_threshold": threshold,
-        "risk_bands": {"low_max": qs["p25"], "high_min": qs["p90"]},
+        "risk_bands": {"low_max": RISK_BAND_LOW_MAX, "high_min": RISK_BAND_HIGH_MIN},
         "val_probability_quantiles": qs,
         "prob_floor": PROB_FLOOR,
         "prob_ceil": PROB_CEIL,
