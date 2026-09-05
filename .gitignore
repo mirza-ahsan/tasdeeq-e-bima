@@ -34,6 +34,7 @@ data/processed/
 models/*.txt
 models/*.pkl
 models/*.joblib
+models/*.parquet
 !models/.gitkeep
 
 # ---- Runtime artifacts ----

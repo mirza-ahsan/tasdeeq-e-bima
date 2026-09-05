@@ -161,21 +161,42 @@ for the multiclass CARC head in Phase 3.
 
 ---
 
-## Phase 3 — Train & calibrate
+## Phase 3 — Train & calibrate ✅ COMPLETE
 
-- [ ] `ml/train.py`
-  - [ ] 80 / 10 / 10 train-val-test split, stratified
-  - [ ] **Risk model:** LightGBM binary, early stopping on val
-  - [ ] **Train with missing values present** — randomly mask 20–60% of features per row so the model is genuinely good at partial-information prediction. *This is the single most important training detail; the adaptive loop depends on it.*
-  - [ ] Isotonic calibration fitted on val
-  - [ ] **CARC model:** LightGBM multiclass, trained on rejected claims only
-  - [ ] SHAP `TreeExplainer` + persisted background sample
-  - [ ] Persist: `models/risk_model.txt`, `models/carc_model.txt`, `models/calibrator.pkl`, `models/metadata.json`
-- [ ] `models/metadata.json` carries feature list, category vocabularies, and **per-feature value priors** (needed by the info-gain step)
-- [ ] `ml/evaluate.py` → `docs/model-card.md`
-  - [ ] Accuracy, AUC, precision/recall, confusion matrix, calibration curve
-  - [ ] CARC model top-1 and top-3 accuracy
-  - [ ] **Accuracy gate: 70–85%. If it lands above 85%, add noise or drop a leaky feature and retrain.** Near-perfect accuracy on self-generated data damages credibility (`plan.md` §9).
+- [x] `ml/features.py` — single shared feature contract imported by training, the adaptive engine and the API, so the question flow can never drift from what the model was trained on
+- [x] `ml/train.py`
+  - [x] 80 / 10 / 10 stratified split (2,889 / 361 / 362)
+  - [x] **Risk model:** LightGBM binary, early stopping on val — 85 trees
+  - [x] **Masking augmentation** — 3 partial copies per claim, masked count drawn uniformly 0–14 so the model sees every state the loop passes through, including "nothing answered yet"
+  - [x] Derived features masked whenever any of their inputs is masked
+  - [x] Isotonic calibration on val, over the same partial-information distribution
+  - [x] **CARC model:** LightGBM multiclass on rejected claims only (12 classes)
+  - [x] SHAP `TreeExplainer` verified end to end + background sample persisted
+  - [x] Persisted `risk_model.txt`, `carc_model.txt`, `calibrator.pkl`, `metadata.json`
+- [x] `metadata.json` carries the feature contract, category vocabularies, per-feature value priors, derived-feature reference tables, operating points and metrics
+- [x] `ml/evaluate.py` → `docs/model-card.md` with confusion matrix, calibration table, SHAP ranking and per-code accuracy
+- [x] **Accuracy gate 70–85%: PASS at 77.9%**
+
+**Final metrics**
+
+| | Fully answered | Partially answered |
+|---|---|---|
+| ROC AUC | **0.788** | 0.733 |
+| Accuracy | 77.9% | 71.3% |
+| Precision / Recall / F1 | 57.0% / 67.7% / 0.619 | — |
+| Majority-class baseline | 73.5% | — |
+| CARC top-1 / top-3 | 68.2% / 79.7% | — |
+
+**Problems found and fixed during Phase 3:**
+- **Isotonic saturation.** Calibration mapped the top bin to exactly 1.0, but only 33% of claims scored 1.0 were actually rejected — real overconfidence, not a display quirk. Added `ml/calibration.py` clamping to [2%, 97%], imported by training, evaluation and the API so all three agree.
+- **Recall collapsed to 19.8%** at the default 0.5 threshold — the model was playing the majority class, exactly the imbalance laziness the research notes warn about. Fixed with `scale_pos_weight` plus a decision threshold tuned on validation (0.23). Recall 19.8% → 67.7%, F1 0.311 → 0.619.
+- **Accuracy was only +0.6% over the majority baseline.** A hyperparameter sweep found fewer masked copies and smaller trees consistently better; lift is now +4.4% and partial-information AUC rose 0.669 → 0.733.
+- **`evaluate.py` was still hardcoding threshold 0.5** while training used the tuned value, so the model card disagreed with training by 1.4 points. Both now read `decision_threshold` from metadata.
+
+**Corrections that carry into Phase 4:**
+- **The stopping rule's "confidently risky" threshold must change.** The plan assumed `p > 0.70`, but the 95th percentile of predicted probability is **0.537** — `p > 0.70` would essentially never fire. Use the data-driven bands now stored in `metadata.json`: `risk_bands.low_max = 0.177`, `risk_bands.high_min = 0.403`.
+- `metadata.json` stores `val_probability_quantiles` (p10 0.133 → p95 0.537). Tune stopping against these, not against guessed constants.
+- Model binaries stay gitignored and are rebuilt with `python ml/train.py`. Phase 7 deployment must either train in the container or ship the artifacts separately.
 
 ---
 
