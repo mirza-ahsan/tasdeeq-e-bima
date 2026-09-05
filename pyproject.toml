@@ -1,0 +1,25 @@
+[project]
+name = "tasdeeq-e-bima"
+version = "0.1.0"
+description = "Claim Rejection Risk Predictor for private clinics — hackathon prototype"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "python-dotenv>=1.0",
+    "openai>=1.54",
+    "lightgbm>=4.5",
+    "scikit-learn>=1.5",
+    "shap>=0.46",
+    "pandas>=2.2",
+    "pyarrow>=17.0",
+    "numpy>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "httpx>=0.27"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

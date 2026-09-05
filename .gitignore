@@ -1,0 +1,49 @@
+# ---- Secrets: never commit ----
+.env
+.env.*
+!.env.example
+
+# Cloud credential exports (Alibaba Cloud downloads these as CSV)
+*apiKey*.csv
+*api-key*.csv
+*accessKey*.csv
+*AccessKey*.csv
+*credential*.csv
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ---- Node / Next.js ----
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+
+# ---- Data & models (large / regenerable) ----
+data/raw/
+data/processed/
+models/*.txt
+models/*.pkl
+models/*.joblib
+!models/.gitkeep
+
+# ---- Runtime artifacts ----
+*.db
+*.sqlite3
+backend/feedback.db
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
