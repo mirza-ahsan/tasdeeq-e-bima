@@ -44,8 +44,6 @@ class StepOut(BaseModel):
 class StartRequest(BaseModel):
     patient_age: int = Field(44, ge=0, le=120)
     patient_gender: Literal["M", "F"] = "F"
-    prefill: dict[str, Any] | None = Field(
-        None, description="Optional pre-filled answers, used by the demo endpoints.")
 
 
 class AnswerRequest(BaseModel):

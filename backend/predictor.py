@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from ml.calibration import PROB_CEIL, PROB_FLOOR
-from ml.features import (BOOLEAN_FEATURES, CATEGORICAL_FEATURES, DERIVED_DEPENDENCIES,
+from ml.features import (CATEGORICAL_FEATURES, DERIVED_DEPENDENCIES,
                          FEATURES)
 
 ROOT = Path(__file__).resolve().parent.parent

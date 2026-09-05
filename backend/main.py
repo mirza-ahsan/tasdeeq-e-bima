@@ -35,6 +35,10 @@ CARC_CODES = {c["code"]: c for c in
 
 MAX_SESSIONS = 500  # simple bound; oldest are evicted first
 
+# Presentation thresholds: below these, a value is noise and showing it misleads.
+MIN_CONTRIBUTION_POINTS = 1.0     # percentage points
+MIN_ALTERNATIVE_CONFIDENCE = 0.05
+
 
 @dataclass
 class Session:
@@ -112,10 +116,6 @@ def start_session(req: StartRequest) -> StepOut:
 
     session = Session(id=str(uuid.uuid4()))
     session.answers = {"patient_age": req.patient_age, "patient_gender": req.patient_gender}
-    if req.prefill:
-        for k, v in req.prefill.items():
-            if k in ASKABLE_FEATURES or k in CONTEXT_FEATURES:
-                session.answers[k] = v
     SESSIONS[session.id] = session
     return _advance(session)
 
@@ -140,18 +140,22 @@ def get_result(session_id: str) -> ResultOut:
     contributions = predictor.explain(answers, top_n=4)
     carc_ranked = predictor.predict_carc(answers, top_n=3)
 
+    # Drop contributions too small to act on. A clerk reading "patient age, -0.8 points"
+    # learns nothing and cannot change it; it only dilutes the fields that matter.
     flagged = [
         FlaggedFieldOut(feature=c.feature, label=feature_label(c.feature),
                         value_label=value_label(c.feature, c.value), effect=c.effect,
                         contribution_points=round(c.contribution_points, 1))
-        for c in contributions
+        for c in contributions if abs(c.contribution_points) >= MIN_CONTRIBUTION_POINTS
     ]
 
     # The CARC head is trained on rejected claims only, so its output is only meaningful
     # when the claim actually looks like it will be rejected. Presenting a "most likely
     # rejection reason" for a clean claim would be misleading.
     top_carc = _carc_out(*carc_ranked[0]) if carc_ranked and band != "low" else None
-    alternatives = [_carc_out(c, p) for c, p in carc_ranked[1:]] if top_carc else []
+    # Only surface alternatives with real support. Listing "CARC 16 (0%)" reads as a bug.
+    alternatives = ([_carc_out(c, p) for c, p in carc_ranked[1:]
+                     if p >= MIN_ALTERNATIVE_CONFIDENCE] if top_carc else [])
 
     # Qwen sees only what the models computed — nothing else is in scope for it.
     prediction = ClaimPrediction(

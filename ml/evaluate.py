@@ -88,9 +88,6 @@ def main() -> int:
     print(f"  highest-risk claim p={p_te[worst]:.0%}, top driver "
           f"{contrib.index[0]}={contrib.iloc[0]:+.3f} — OK")
 
-    # Persist a background sample for interventional SHAP if we ever need it.
-    X_tr.sample(min(200, len(X_tr)), random_state=SEED).to_parquet(MODELS / "shap_background.parquet")
-
     # --- CARC model ---
     rej = df[df[TARGET]].copy()
     classes = meta["carc_classes"]

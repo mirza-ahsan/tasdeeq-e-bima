@@ -45,8 +45,3 @@ def log_feedback(session_id: str, verdict: str, predicted_prob: float | None,
             (datetime.now(timezone.utc).isoformat(), session_id, verdict, predicted_prob,
              predicted_carc, n_answered, json.dumps(answers, default=str), note))
         return int(cur.lastrowid)
-
-
-def count() -> int:
-    with _connect() as conn:
-        return int(conn.execute("SELECT COUNT(*) FROM feedback").fetchone()[0])

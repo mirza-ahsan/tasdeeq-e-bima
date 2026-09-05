@@ -33,7 +33,7 @@ from ml.calibration import (PROB_CEIL, PROB_FLOOR, build_calibrator,  # noqa: E4
                             predict_proba)
 from ml.features import (  # noqa: E402
     ASKABLE_FEATURES, BOOLEAN_FEATURES, CARC_TARGET, CATEGORICAL_FEATURES,
-    CONTEXT_FEATURES, DERIVED_DEPENDENCIES, DERIVED_FEATURES, FEATURES, TARGET,
+    CONTEXT_FEATURES, DERIVED_DEPENDENCIES, FEATURES, TARGET,
 )
 
 PROC = ROOT / "data" / "processed"

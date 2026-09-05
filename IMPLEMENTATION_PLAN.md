@@ -305,19 +305,70 @@ CLEAN: 3 questions | 21% → 19% → 18% [low]  | no CARC
 
 ---
 
-## Phase 6 — Frontend
+## Phase 6 — Frontend ✅ COMPLETE
 
-- [ ] `npx create-next-app@latest frontend --typescript --tailwind --app`
-- [ ] shadcn/ui for the primitives
-- [ ] Components:
-  - [ ] `ChatFlow` — one question at a time, previous answers visible above
-  - [ ] `RiskGauge` — animated 0–100%, colour-banded, updates after every answer
-  - [ ] `QuestionCard` — question + options + a one-line "why we're asking this"
-  - [ ] `ExplanationCard` — final probability, flagged fields with SHAP bars, CARC code + description, Qwen text
-  - [ ] `MarkWrongButton` — posts to `/api/feedback`, shows a confirmation toast
-  - [ ] `DemoSwitcher` — one-click load of the risky / clean scripted claim
-- [ ] Show the **question count** ("Question 2 of ~4") so the adaptive brevity is visible
-- [ ] Visibly label the Qwen text as an explanation of the computed result, not a separate opinion
+Next.js 16 (App Router) + Tailwind v4. **shadcn/ui was skipped deliberately** — its defaults
+are the look every AI-built demo has. Components are hand-written against a small token set,
+which is what makes this look like a clinical instrument rather than a template.
+
+- [x] `app/globals.css` — design tokens, light + dark, one keyframe
+- [x] `app/layout.tsx` — Newsreader (display), IBM Plex Sans (body), IBM Plex Mono (figures)
+- [x] `lib/api.ts` + `lib/types.ts` — typed client mirroring the Pydantic schemas
+- [x] `components/Masthead.tsx` — provenance line: model, claim count, AUC
+- [x] `components/StartScreen.tsx` — the pitch in two paragraphs, three entry points
+- [x] `components/QuestionCard.tsx` — one question, lettered options, live info-gain figure
+- [x] `components/AnswerLedger.tsx` — answers so far as a record
+- [x] `components/RiskMeter.tsx` — measuring scale with ticks and band regions
+- [x] `components/FlaggedFields.tsx` — SHAP contributions as signed bars
+- [x] `components/ResultPanel.tsx` — verdict, Qwen reading, CARC citation, mark-wrong
+- [x] Verified end to end in a browser on both demo claims
+- [x] `npx tsc --noEmit` clean, production build clean
+
+**Design decisions**
+- Warm paper ground and ink text, not white-on-grey. Hairline rules instead of floating cards
+  and drop shadows. No gradients, no glassmorphism, no purple.
+- A serif display face (Newsreader) is the single biggest departure from the generic look.
+- Motion is limited to one 220ms entrance per question and a 300ms marker slide. Everything
+  respects `prefers-reduced-motion`.
+- The **info-gain figure is shown on every question**. It is the evidence that the question
+  was chosen rather than scripted — worth pointing at during the walkthrough.
+- The CARC code is presented as a **formal citation**, with the official X12 wording in mono
+  beneath the plain-English version and the standard named. It reads as a reference, not a
+  chat reply.
+- Qwen's text is captioned with what it can and cannot do: *"restating the figures above. It
+  cannot change the probability, the reason code, or which fields were flagged."*
+
+**Problems found and fixed during Phase 6:**
+- **The risk meter showed "no change" before any question was answered**, because React's
+  development double-invoke ran the effect twice on mount.
+- **The change note went stale.** It was keyed on the percentage, so an answer that left the
+  estimate untouched kept showing the *previous* answer's delta — the risky claim read
+  "▲ 17 pts" three times in a row. Both fixed by keying the note on the answer count and
+  storing `{sequence, pct}` together.
+- **Zero-confidence reason codes were being listed.** The result showed "Also possible: CARC
+  16 (0%), CARC 27 (0%)", which reads as a bug. Filtered below 5% in the API.
+- **Negligible SHAP contributions were being shown.** "Patient age, −0.8 points" is not
+  something a clerk can act on and it dilutes the fields that matter. Filtered below 1.0
+  percentage point in the API.
+
+**Cleanup done in this phase:**
+- Removed `StartRequest.prefill` — declared and handled, but nothing ever sent it
+- Removed `models/shap_background.parquet` and the code writing it — TreeExplainer on
+  LightGBM is tree-path-dependent and needs no background dataset; nothing ever read it
+- Removed `feedback_store.count()` — no callers
+- Removed unused `DERIVED_FEATURES` import from `train.py`
+- Removed the Next.js template leftovers: `public/*.svg`, the default `favicon.ico`,
+  and the scaffold's `AGENTS.md` / `CLAUDE.md`. Added a real `app/icon.svg`.
+
+**Verified walkthrough**
+
+| | Risky claim | Clean claim |
+|---|---|---|
+| Questions | 4 | 3 |
+| Path | 21% → 38% → 66% | 21% → 19% → 18% |
+| Verdict | "This claim is likely to be rejected." | "This claim looks ready to submit." |
+| Reason | CARC 197, 99% confidence | none shown, with the reason why |
+| Stop | confident high risk | confident low risk |
 
 ---
 
