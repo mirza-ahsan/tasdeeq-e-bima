@@ -108,29 +108,38 @@ Synthea sample CSVs ──► build_dataset.py ──► label_carc.py ──►
 
 ---
 
-## Phase 2 — Feature engineering & CARC labeling
+## Phase 2 — Feature engineering & CARC labeling ✅ COMPLETE
 
-- [ ] `ml/build_dataset.py` — join Synthea tables into one row per claim
-- [ ] Re-skin to Pakistani private-clinic context:
-  - [ ] Amounts converted to **PKR**, rounded to believable clinic invoice sizes
-  - [ ] Generic PK insurer/TPA names (e.g. *Jubilee-style* placeholders — invented brand names, not real companies' real data)
-  - [ ] Plan tiers: `basic` / `standard` / `premium` / `corporate`
-- [ ] `ml/label_carc.py` — rules-based labeler assigning CARC codes
-  - [ ] Each rule fires **probabilistically**, not deterministically (so the model learns patterns, not the rule table)
-  - [ ] Base random rejection rate ~3–5% with no clear driver
-  - [ ] Label noise: flip ~8–12% of outcomes
-  - [ ] Target overall rejection rate **~22–28%**
-- [ ] Output `data/processed/claims.parquet` (target 2,000–5,000 rows)
-- [ ] Sanity check: no single feature perfectly predicts the label (grep for leakage)
+- [x] `ml/build_dataset.py` — join Synthea tables into one row per claim (grain = encounter)
+- [x] Re-skin to Pakistani private-clinic context:
+  - [x] Amounts rescaled to **PKR** (×12, rounded to 50) — median PKR 12,100, max PKR 941,650
+  - [x] **Fictional** insurer/TPA names built from ordinary Urdu words — deliberately not real Pakistani insurers
+  - [x] Plan tiers `basic` / `standard` / `premium` / `corporate`, weighted by insurer type
+- [x] `ml/label_carc.py` — rules-based labeller assigning CARC codes
+  - [x] Each rule fires **probabilistically** (0.20–0.85), first rule in adjudication priority order wins
+  - [x] Base random rejection rate **2.5%** with no clear driver
+  - [x] Label noise: **8%** of labels flipped in both directions
+  - [x] Overall rejection rate **26.5%** (target 22–28%)
+- [x] Output `data/processed/claims.parquet` — **3,612 rows**
+- [x] Leakage check — strongest single feature is `pre_auth_obtained` at **0.699 AUC**, nothing near 0.95
 
-**Feature set** — every row is either asked as a question or derived:
+**Outcome:** all 12 CARC codes represented among rejected claims, 34–151 examples each — enough
+for the multiclass CARC head in Phase 3.
 
-| Feature | Type | Asked? |
+**Decisions made during Phase 2** (carry into Phase 3):
+- **`NO_INSURANCE` encounters dropped** (540 rows). An uninsured visit is not an insurance claim and cannot be accepted or rejected — leaving them in would teach the model nonsense.
+- **`is_duplicate_submission` added as a 15th asked feature.** CARC 18 was in the code table with no feature behind it. Added rather than dropping the code.
+- **Mismatch features are corrupted, not coin-flipped.** `diagnosis_procedure_match` and the CARC 6 age inconsistency are produced by reassigning a real field, so the inconsistency is a learnable relationship between two fields the model can see — not unlearnable noise.
+- **Two tuning rounds needed.** The first pass came out at 41% rejection; both defect *incidence* and rule fire probabilities had to come down, not just the probabilities.
+
+**Feature set as built** (22 features):
+
+| Feature | Type | Asked in the flow? |
 |---|---|---|
-| `procedure_category` | categorical | ✅ |
-| `diagnosis_category` | categorical | ✅ |
-| `insurer_tpa` | categorical | ✅ |
-| `plan_tier` | categorical | ✅ |
+| `procedure_category` | categorical, 14 levels | ✅ |
+| `diagnosis_category` | categorical, 13 levels | ✅ |
+| `insurer_tpa` | categorical, 9 levels | ✅ |
+| `plan_tier` | categorical, 4 levels | ✅ |
 | `pre_auth_obtained` | yes / no / not_required | ✅ |
 | `documents_complete` | complete / partial / missing | ✅ |
 | `days_since_treatment` | numeric | ✅ |
@@ -139,11 +148,16 @@ Synthea sample CSVs ──► build_dataset.py ──► label_carc.py ──►
 | `patient_policy_active` | boolean | ✅ |
 | `is_emergency` | boolean | ✅ |
 | `diagnosis_procedure_match` | boolean | ✅ |
+| `is_duplicate_submission` | boolean | ✅ |
 | `prior_claims_30d` | numeric | ✅ |
-| `patient_age_band` | categorical | ✅ |
-| `pre_auth_required_for_procedure` | derived | ✖ |
+| `patient_age_band` | categorical, 6 levels | ✅ |
+| `pre_auth_required_for_procedure` | derived boolean | ✖ |
 | `amount_vs_procedure_median` | derived ratio | ✖ |
 | `days_vs_insurer_filing_limit` | derived ratio | ✖ |
+| `insurer_filing_limit_days` | known from insurer | ✖ |
+| `patient_age` | numeric, from record | ✖ |
+| `patient_gender` | categorical, from record | ✖ |
+| `encounter_class` | categorical, from record | ✖ |
 
 ---
 
