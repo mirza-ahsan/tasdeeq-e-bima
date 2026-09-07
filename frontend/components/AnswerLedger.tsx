@@ -21,6 +21,16 @@ export function AnswerLedger({
 }) {
   if (answered.length === 0) return null;
 
+  // The API returns answers in feature order; this is a record of a conversation,
+  // so it reads in the order the questions were actually asked. `effects` is keyed
+  // in insertion order, which is that order.
+  const asked = Object.keys(effects);
+  const rows = [...answered].sort((a, b) => {
+    const ia = asked.indexOf(a.feature);
+    const ib = asked.indexOf(b.feature);
+    return (ia < 0 ? asked.length : ia) - (ib < 0 ? asked.length : ib);
+  });
+
   return (
     <section className="mt-12">
       <div className="flex items-baseline gap-3">
@@ -30,7 +40,7 @@ export function AnswerLedger({
       </div>
 
       <dl className="mt-3">
-        {answered.map((a) => {
+        {rows.map((a) => {
           const delta = effects[a.feature];
           const notable = delta !== undefined && Math.abs(delta) >= NOTABLE_POINTS;
           const up = (delta ?? 0) > 0;

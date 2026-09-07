@@ -96,14 +96,30 @@ export function RiskMeter({
       </div>
 
       {!compact && (
-        <div className="tnum mt-1 flex justify-between text-[10px] text-ink-muted">
-          <span>0</span>
-          <span>
-            {LOW_MAX * 100} · low below
-          </span>
-          <span>{HIGH_MIN * 100} · high above</span>
-          <span>100</span>
-        </div>
+        <>
+          {/* Positioned, not distributed: justify-between would space these evenly
+              and put the "20" label a third of the way along a scale where 20 is a
+              fifth of the way along — a mislabelled axis on a measuring instrument. */}
+          <div className="tnum relative mt-1 h-3.5 text-[10px] text-ink-muted">
+            <span className="absolute left-0">0</span>
+            <span
+              className="absolute -translate-x-1/2"
+              style={{ left: `${LOW_MAX * 100}%` }}
+            >
+              {LOW_MAX * 100}
+            </span>
+            <span
+              className="absolute -translate-x-1/2"
+              style={{ left: `${HIGH_MIN * 100}%` }}
+            >
+              {HIGH_MIN * 100}
+            </span>
+            <span className="absolute right-0">100</span>
+          </div>
+          <p className="text-[10.5px] leading-relaxed text-ink-muted">
+            Low below {LOW_MAX * 100}, high above {HIGH_MIN * 100}.
+          </p>
+        </>
       )}
     </div>
   );

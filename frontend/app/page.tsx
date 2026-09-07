@@ -139,7 +139,7 @@ export default function Page() {
         repeated here as a sticky strip. The model's current opinion is never
         more than a glance away, at any width — there is no reveal to wait for.
       */}
-      <div className="rule-b sticky top-0 z-10 bg-paper/95 backdrop-blur-[2px] lg:hidden">
+      <div className="rule-b sticky top-0 z-10 bg-paper lg:hidden">
         <div className="mx-auto max-w-[1180px] px-6 py-3 sm:px-10">
           <RiskMeter
             compact

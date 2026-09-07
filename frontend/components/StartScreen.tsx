@@ -12,7 +12,7 @@ export function StartScreen({
   onDemo: (which: "risky" | "clean") => void;
 }) {
   return (
-    <div className="rise mx-auto max-w-[640px] py-16 sm:py-24">
+    <div className="rise max-w-[640px] py-16 sm:py-24">
       <h1 className="font-display text-[2.6rem] leading-[1.15] tracking-[-0.02em] sm:text-[3.1rem]">
         A spell-checker for insurance claims.
       </h1>
