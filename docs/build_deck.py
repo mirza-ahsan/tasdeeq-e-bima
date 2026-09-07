@@ -72,6 +72,21 @@ SLIDES: list[dict] = [
                 ("4.1", "questions, problem claim")],
          note=""),
 
+    dict(eyebrow="THE INTERFACE", headline="The estimate is never hidden",
+         body=["The running probability is on screen from the first question, so there",
+               "is no reveal to wait for. Every answer is scored against the reading",
+               "immediately before it — a field that hurts the claim is flagged while",
+               "staff can still correct it, not in the verdict when they cannot.",
+               "",
+               "     \"Supporting documents: Some missing — this raised the",
+               "      estimate by 17 points.\"",
+               "",
+               "SHAP attribution, the CARC citation and Qwen's plain-language reading",
+               "sit alongside it. No rejection reason is shown for a clean claim: the",
+               "reason model trains only on rejected claims, so naming one would be",
+               "inventing a problem."],
+         note="Built for clinic admin staff — CARC, SHAP and information gain each carry a definition"),
+
     dict(eyebrow="RESULTS", headline="Deliberately not perfect",
          body=["Only 26.5% of claims are rejected, so blindly approving everything",
                "already scores 73.5%. Accuracy is the wrong headline — AUC and recall",
@@ -116,7 +131,7 @@ SLIDES: list[dict] = [
                "4.  Per-insurer models — filing rules and tariffs differ by payer",
                "",
                "The system supports all four. It cannot access the data they need."],
-         note="Python · LightGBM · SHAP · FastAPI · Next.js · Qwen on DashScope · Alibaba Cloud ECS"),
+         note="Python · LightGBM · SHAP · FastAPI · Next.js · Qwen on DashScope · containerised, ECS runbook"),
 ]
 
 

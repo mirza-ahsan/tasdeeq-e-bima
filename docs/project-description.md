@@ -116,6 +116,8 @@ The system we built supports all four. It simply cannot access the data they req
 ## Stack
 
 Python 3.12, LightGBM, SHAP, FastAPI · Next.js 16, TypeScript, Tailwind ·
-Qwen (`qwen-plus`) via Alibaba Cloud DashScope · deployed on Alibaba Cloud ECS.
+Qwen (`qwen-plus`) via Alibaba Cloud DashScope. Both services are containerised, and
+[`deployment.md`](deployment.md) is a tested runbook for Alibaba Cloud ECS; the demo
+runs locally.
 
 Architecture diagram: [`architecture.svg`](architecture.svg).
