@@ -35,7 +35,7 @@ SLIDES: list[dict] = [
          body=["A spell-checker for insurance claims.",
                "Checks a clinic's claim before it is submitted: how likely it is to be",
                "rejected, which field is the problem, and what to fix."],
-         note="Mirza Ahsan Baig and Safee · LightGBM + SHAP + Qwen on DashScope"),
+         note="Mirza Ahsan Baig and Safee Akmal · LightGBM + SHAP + Qwen on DashScope"),
 
     dict(eyebrow="THE PROBLEM", headline="Rejections are paperwork, not medicine",
          body=["A clinic treats an insured patient, then bills the insurer or TPA.",

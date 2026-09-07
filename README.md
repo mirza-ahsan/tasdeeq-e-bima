@@ -4,7 +4,7 @@
 
 Before a clinic submits a bill to an insurer or TPA, this tool looks at the claim and tells staff, in plain English: how likely it is to bounce, which specific field is the problem, and what to fix. Think spell-check, but for insurance claims instead of prose.
 
-Built for the Bano Qabil AI hackathon by Mirza Ahsan Baig and Safee.
+Built for the Bano Qabil AI hackathon by Mirza Ahsan Baig and Safee Akmal.
 
 ---
 

@@ -1,6 +1,6 @@
 # Claim Check — written project description
 
-*Bano Qabil AI hackathon submission — Mirza Ahsan Baig and Safee.*
+*Bano Qabil AI hackathon submission — Mirza Ahsan Baig and Safee Akmal.*
 
 ## The problem
 
