@@ -99,3 +99,19 @@ def test_feedback_is_logged(client):
     r = client.post("/api/feedback", json={"session_id": step["session_id"],
                                           "verdict": "wrong", "note": "test"}).json()
     assert r["ok"] and r["logged_id"] > 0
+
+
+def test_step_reports_the_engine_s_own_question_bounds(client):
+    """The UI shows "3 more answers before a verdict" and marks the floor on its
+    progress track. Both numbers have to come from the engine rather than being
+    retyped in TypeScript — a stale copy would have the interface promising a
+    minimum the engine does not enforce."""
+    from backend.services.adaptive import MAX_QUESTIONS, MIN_QUESTIONS
+
+    step = client.post("/api/session/start", json={"patient_age": 44, "patient_gender": "F"}).json()
+    assert step["min_questions"] == MIN_QUESTIONS
+    assert step["max_questions"] == MAX_QUESTIONS
+
+    # And the bound is honoured: no verdict is reached on fewer answers than it claims.
+    final, _ = drive(client, "clean")
+    assert final["n_answered"] >= final["min_questions"]

@@ -1,3 +1,6 @@
+"use client";
+
+import { GLOSSARY, Term } from "@/components/Term";
 import type { FlaggedField } from "@/lib/types";
 
 /**
@@ -44,7 +47,8 @@ export function FlaggedFields({ fields }: { fields: FlaggedField[] }) {
         })}
       </ul>
       <p className="mt-4 text-[11px] leading-relaxed text-ink-muted">
-        Percentage points, from SHAP attribution on this specific claim.
+        Percentage points, from{" "}
+        <Term definition={GLOSSARY.shap}>SHAP attribution</Term> on this specific claim.
       </p>
     </div>
   );

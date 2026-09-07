@@ -35,6 +35,7 @@ class StepOut(BaseModel):
     probability: float
     risk_band: Literal["low", "medium", "high"]
     n_answered: int
+    min_questions: int
     max_questions: int
     question: QuestionOut | None = None
     stop_reason: str | None = None

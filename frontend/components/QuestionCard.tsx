@@ -1,33 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { GLOSSARY, Term } from "@/components/Term";
 import type { Question } from "@/lib/types";
 
 /**
- * One question at a time. The information-gain figure is shown deliberately: it is the
- * evidence that the question was chosen rather than scripted, and it is the detail worth
- * pointing at during the walkthrough.
+ * One question at a time.
+ *
+ * The information-gain figure is shown deliberately: it is the evidence that
+ * the question was chosen rather than scripted. It is jargon, so it carries its
+ * definition rather than assuming one.
+ *
+ * `alert` reports what the previous answer did to the estimate. It appears here
+ * — attached to the next question, while the claim is still being assembled —
+ * rather than in the final explanation, because a problem the user can still
+ * fix should be raised while they can still fix it.
  */
 export function QuestionCard({
   question,
   index,
   suggested,
   busy,
+  alert,
   onAnswer,
 }: {
   question: Question;
   index: number;
   suggested?: unknown;
   busy: boolean;
+  alert: { label: string; valueLabel: string; deltaPoints: number } | null;
   onAnswer: (value: unknown) => void;
 }) {
-  const [numberValue, setNumberValue] = useState<string>("");
-
-  useEffect(() => {
-    setNumberValue(
-      suggested !== undefined && suggested !== null ? String(suggested) : ""
-    );
-  }, [question.feature, suggested]);
+  // The parent remounts this on every question, so the prefilled demo value is
+  // initial state rather than an effect that re-syncs it after the first paint.
+  const [numberValue, setNumberValue] = useState<string>(() =>
+    suggested !== undefined && suggested !== null ? String(suggested) : ""
+  );
 
   const selectedIndex =
     suggested === undefined
@@ -35,15 +43,32 @@ export function QuestionCard({
       : question.options.findIndex((o) => o.value === suggested);
 
   return (
-    <section key={question.feature} className="rise">
+    <section className="rise">
+      {alert && (
+        <div
+          role="status"
+          className="mb-8 border-l-2 pl-4"
+          style={{ borderColor: "var(--risk-high)" }}
+        >
+          <p className="text-[13.5px] leading-relaxed text-ink">
+            <span className="text-ink-muted">{alert.label}:</span> {alert.valueLabel} —
+            this raised the estimate by{" "}
+            <span className="tnum font-medium">{alert.deltaPoints} points</span>.
+          </p>
+          <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">
+            Worth confirming before this claim goes out. If it was entered wrongly, start
+            again rather than submitting on it.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-baseline gap-3">
         <span className="eyebrow tnum">Question {index}</span>
         <span className="h-px flex-1 bg-rule" />
-        <span
-          className="tnum text-[11px] text-ink-muted"
-          title="Expected reduction in uncertainty from asking this, in bits. The field with the highest value is chosen."
-        >
-          info gain {question.expected_info_gain.toFixed(4)}
+        <span className="eyebrow tnum !normal-case !tracking-normal">
+          <Term definition={GLOSSARY.infoGain}>
+            info gain {question.expected_info_gain.toFixed(4)}
+          </Term>
         </span>
       </div>
 
@@ -65,7 +90,6 @@ export function QuestionCard({
                 className="group flex w-full items-center gap-4 border border-transparent border-b-rule
                            bg-transparent px-3 py-3 text-left transition-colors
                            hover:border-rule-strong hover:bg-surface
-                           focus-visible:border-accent focus-visible:outline-none
                            disabled:opacity-40"
               >
                 <span
@@ -108,9 +132,7 @@ export function QuestionCard({
           <button
             type="submit"
             disabled={busy || numberValue === ""}
-            className="border border-ink px-5 py-2.5 text-[13px] tracking-wide
-                       transition-colors hover:bg-ink hover:text-paper
-                       disabled:cursor-not-allowed disabled:opacity-30"
+            className="border border-accent bg-accent px-5 py-2.5 text-[13px] tracking-wide text-paper transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
           >
             Continue
           </button>

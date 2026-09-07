@@ -23,15 +23,17 @@ export function StartScreen({
       </p>
       <p className="mt-4 max-w-prose text-[15.5px] leading-[1.65] text-ink-soft">
         It asks one question at a time, choosing each one based on what it has already
-        learned about the claim. Straightforward claims are done in three questions.
+        learned about the claim. Three questions minimum, eight at most; it stops as soon
+        as the next question would not change the answer. The running estimate is on
+        screen throughout, so there is nothing to wait for at the end.
       </p>
 
       <div className="mt-10 flex flex-wrap gap-3">
         <button
           onClick={onStart}
           disabled={busy}
-          className="border border-ink px-6 py-3 text-[13.5px] tracking-wide transition-colors
-                     hover:bg-ink hover:text-paper disabled:opacity-40"
+          className="border border-accent bg-accent px-6 py-3 text-[13.5px] tracking-wide
+                     text-paper transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           Check a claim
         </button>

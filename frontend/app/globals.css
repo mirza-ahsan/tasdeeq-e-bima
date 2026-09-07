@@ -2,24 +2,38 @@
 
 /* ---------------------------------------------------------------------------
    Design language: clinical instrument, not consumer SaaS.
-   Warm paper ground, ink text, hairline rules, no gradients, no floating cards.
-   Motion is limited to the risk marker and question transitions.
+
+   Warm paper ground, ink text, hairline rules. No gradients, no floating
+   cards, no glass. Colour carries exactly two meanings and nothing else:
+
+     --accent      an action the user can take, and keyboard focus
+     --risk-*      the model's verdict, on a three-step ordinal scale
+
+   Anything that is neither an action nor a risk reading stays in ink. That
+   rule is what keeps a dense screen readable: when colour appears, it means
+   something.
    --------------------------------------------------------------------------- */
 
 :root {
+  /* ink-muted and risk-med are darker than they look like they should be: at the
+     11-13px sizes they are actually used at, the lighter values measured 4.2:1 and
+     3.3:1 against paper, under the 4.5:1 floor. */
   --paper:        #faf9f6;
   --surface:      #ffffff;
   --surface-sunk: #f3f1ea;
   --ink:          #17150f;
   --ink-soft:     #4a463b;
-  --ink-muted:    #7d7767;
+  --ink-muted:    #6f6a5a;
   --rule:         #e2ded2;
   --rule-strong:  #cdc7b6;
   --accent:       #1f4b43;
   --accent-soft:  #e7efec;
   --risk-low:     #4a7c59;
-  --risk-med:     #b0812c;
+  --risk-med:     #8a6318;
   --risk-high:    #a34a32;
+  --risk-low-wash:  #eef3ef;
+  --risk-med-wash:  #f7f0e0;
+  --risk-high-wash: #f6ebe6;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -37,6 +51,9 @@
     --risk-low:     #7fa987;
     --risk-med:     #cfa64f;
     --risk-high:    #cd7256;
+    --risk-low-wash:  #1a231c;
+    --risk-med-wash:  #26200f;
+    --risk-high-wash: #271812;
   }
 }
 
@@ -66,6 +83,14 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* One visible focus treatment across the whole app, so keyboard position is
+   never ambiguous. */
+:where(a, button, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
 /* Small-caps section labels, used instead of bold headings. */
 .eyebrow {
   font-family: var(--font-plex-mono), ui-monospace, monospace;
@@ -80,15 +105,32 @@ body {
 .rule-t { border-top: 1px solid var(--rule); }
 .rule-b { border-bottom: 1px solid var(--rule); }
 
-/* One restrained entrance for each new question. */
+/* A term the reader may not know, carrying a definition. Dotted underline is
+   the long-standing convention for this and needs no icon. */
+.term {
+  border-bottom: 1px dotted var(--rule-strong);
+  cursor: help;
+  color: inherit;
+}
+.term:hover { border-bottom-color: var(--ink-muted); }
+
+/* Motion budget: two animations, both reporting a state change.
+   `rise` marks the arrival of a new question or verdict; `settle` marks a
+   number that has just been recomputed. Nothing else moves. */
 @keyframes rise {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
 }
 .rise { animation: rise 220ms cubic-bezier(0.22, 0.9, 0.3, 1) both; }
 
+@keyframes settle {
+  from { opacity: 0.35; }
+  to   { opacity: 1; }
+}
+.settle { animation: settle 260ms ease-out both; }
+
 @media (prefers-reduced-motion: reduce) {
-  .rise { animation: none; }
+  .rise, .settle { animation: none; }
   * { transition-duration: 1ms !important; }
 }
 

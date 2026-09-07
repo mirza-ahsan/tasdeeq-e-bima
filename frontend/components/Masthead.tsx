@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { GLOSSARY, Term } from "@/components/Term";
 import { api } from "@/lib/api";
 import type { Health } from "@/lib/types";
 
@@ -20,9 +21,14 @@ export function Masthead() {
           Rejection risk, before you submit
         </span>
         <span className="ml-auto hidden font-mono text-[10.5px] tracking-wide text-ink-muted md:inline">
-          {health
-            ? `LightGBM · ${health.n_training_claims.toLocaleString()} synthetic claims · AUC ${health.test_auc.toFixed(2)}`
-            : "connecting…"}
+          {health ? (
+            <>
+              LightGBM · {health.n_training_claims.toLocaleString()} synthetic claims ·{" "}
+              <Term definition={GLOSSARY.auc}>AUC {health.test_auc.toFixed(2)}</Term>
+            </>
+          ) : (
+            "connecting…"
+          )}
         </span>
       </div>
     </header>

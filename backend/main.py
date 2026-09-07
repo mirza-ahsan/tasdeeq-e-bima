@@ -24,8 +24,8 @@ from backend.predictor import get_predictor
 from backend.schemas import (AnsweredField, AnswerRequest, CarcOut, ExplanationOut,
                              FeedbackRequest, FeedbackResponse, FlaggedFieldOut, HealthOut,
                              OptionOut, QuestionOut, ResultOut, StartRequest, StepOut)
-from backend.services.adaptive import (MAX_QUESTIONS, AdaptiveEngine, Step, feature_label,
-                                       value_label)
+from backend.services.adaptive import (MAX_QUESTIONS, MIN_QUESTIONS, AdaptiveEngine, Step,
+                                       feature_label, value_label)
 from backend.services.explain_qwen import ClaimPrediction, FlaggedField, explain
 from ml.features import ASKABLE_FEATURES, CONTEXT_FEATURES
 
@@ -89,7 +89,8 @@ def _step_out(session: Session, step: Step) -> StepOut:
     session.last_step = step
     return StepOut(
         session_id=session.id, done=step.done, probability=round(step.probability, 4),
-        risk_band=step.risk_band, n_answered=step.n_answered, max_questions=MAX_QUESTIONS,
+        risk_band=step.risk_band, n_answered=step.n_answered,
+        min_questions=MIN_QUESTIONS, max_questions=MAX_QUESTIONS,
         question=_question_out(step), stop_reason=step.stop_reason,
         answered=_answered_list(session.answers))
 

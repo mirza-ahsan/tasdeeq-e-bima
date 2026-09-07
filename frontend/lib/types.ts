@@ -25,6 +25,7 @@ export interface Step {
   probability: number;
   risk_band: RiskBand;
   n_answered: number;
+  min_questions: number;
   max_questions: number;
   question: Question | null;
   stop_reason: string | null;

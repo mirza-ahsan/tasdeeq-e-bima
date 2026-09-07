@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { AnswerLedger } from "@/components/AnswerLedger";
 import { FlaggedFields } from "@/components/FlaggedFields";
 import { Masthead } from "@/components/Masthead";
+import { ProgressTrack } from "@/components/ProgressTrack";
 import { QuestionCard } from "@/components/QuestionCard";
 import { ResultPanel } from "@/components/ResultPanel";
 import { RiskMeter } from "@/components/RiskMeter";
@@ -13,10 +14,17 @@ import type { Result, Step } from "@/lib/types";
 
 type DemoKind = "risky" | "clean";
 
+/** A jump this large is worth interrupting the flow for; smaller ones sit in the ledger. */
+const ALERT_POINTS = 8;
+
 export default function Page() {
   const [step, setStep] = useState<Step | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [scripted, setScripted] = useState<Record<string, unknown> | null>(null);
+  const [effects, setEffects] = useState<Record<string, number>>({});
+  const [alert, setAlert] = useState<
+    { label: string; valueLabel: string; deltaPoints: number } | null
+  >(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,6 +45,8 @@ export default function Page() {
       setError(null);
       setResult(null);
       setScripted(script);
+      setEffects({});
+      setAlert(null);
       try {
         const first = await loader();
         setStep(first);
@@ -63,11 +73,29 @@ export default function Page() {
       return first;
     }, null);
 
+  /**
+   * Each answer is scored by what it did to the estimate: the reading before it
+   * against the reading after. The model reports its current probability at
+   * every turn, so this costs no extra call, and it is what lets a harmful
+   * field be flagged the moment it is entered instead of at the verdict.
+   */
   async function answer(value: unknown) {
     if (!step?.question) return;
+    const feature = step.question.feature;
+    const before = Math.round(step.probability * 100);
+
     setBusy(true);
     try {
-      const next = await api.answer(step.session_id, step.question.feature, value);
+      const next = await api.answer(step.session_id, feature, value);
+      const delta = Math.round(next.probability * 100) - before;
+      const field = next.answered.find((a) => a.feature === feature);
+
+      setEffects((prev) => ({ ...prev, [feature]: delta }));
+      setAlert(
+        delta >= ALERT_POINTS && field
+          ? { label: field.label, valueLabel: field.value_label, deltaPoints: delta }
+          : null
+      );
       setStep(next);
       if (next.done) await finish(next.session_id);
     } catch (e) {
@@ -81,104 +109,117 @@ export default function Page() {
     setStep(null);
     setResult(null);
     setScripted(null);
+    setEffects({});
+    setAlert(null);
     setError(null);
   }
 
-  const showWorkspace = step !== null;
+  if (step === null) {
+    return (
+      <div className="flex min-h-full flex-col">
+        <Masthead />
+        <main className="mx-auto w-full max-w-[1180px] flex-1 px-6 sm:px-10">
+          <StartScreen busy={busy} error={error} onStart={startBlank} onDemo={startDemo} />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  const probability = result?.probability ?? step.probability;
+  const band = result?.risk_band ?? step.risk_band;
+  const settled = Boolean(result);
 
   return (
     <div className="flex min-h-full flex-col">
       <Masthead />
 
-      <main className="mx-auto w-full max-w-[1180px] flex-1 px-6 sm:px-10">
-        {!showWorkspace ? (
-          <StartScreen
-            busy={busy}
-            error={error}
-            onStart={startBlank}
-            onDemo={startDemo}
+      {/*
+        On a narrow screen the rail sits below the fold, so the reading is
+        repeated here as a sticky strip. The model's current opinion is never
+        more than a glance away, at any width — there is no reveal to wait for.
+      */}
+      <div className="rule-b sticky top-0 z-10 bg-paper/95 backdrop-blur-[2px] lg:hidden">
+        <div className="mx-auto max-w-[1180px] px-6 py-3 sm:px-10">
+          <RiskMeter
+            compact
+            probability={probability}
+            band={band}
+            sequence={step.n_answered}
+            settled={settled}
           />
-        ) : (
-          <div className="grid gap-x-14 gap-y-10 py-12 lg:grid-cols-[minmax(0,1fr)_320px]">
-            {/* conversation */}
-            <div className="min-w-0">
-              <AnswerLedger answered={step.answered} />
+        </div>
+      </div>
 
-              {result ? (
-                <ResultPanel result={result} onRestart={restart} />
-              ) : step.question ? (
-                <QuestionCard
-                  question={step.question}
-                  index={step.n_answered + 1}
-                  suggested={scripted?.[step.question.feature]}
-                  busy={busy}
-                  onAnswer={answer}
-                />
-              ) : (
-                <p className="text-[13px] text-ink-muted">Working…</p>
-              )}
+      <main className="mx-auto w-full max-w-[1180px] flex-1 px-6 sm:px-10">
+        <div className="grid gap-x-14 gap-y-10 py-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:py-12">
+          {/* The active task. */}
+          <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+            {result ? (
+              <ResultPanel result={result} onRestart={restart} />
+            ) : step.question ? (
+              <QuestionCard
+                key={step.question.feature}
+                question={step.question}
+                index={step.n_answered + 1}
+                suggested={scripted?.[step.question.feature]}
+                busy={busy}
+                alert={alert}
+                onAnswer={answer}
+              />
+            ) : (
+              <p className="text-[13px] text-ink-muted">Working…</p>
+            )}
 
-              {error && (
-                <p className="mt-8 border-l-2 border-risk-high pl-4 text-[13px] text-ink-soft">
-                  {error}
-                </p>
-              )}
+            <AnswerLedger answered={step.answered} effects={effects} />
+
+            {error && (
+              <p className="mt-8 border-l-2 border-risk-high pl-4 text-[13px] text-ink-soft">
+                {error}
+              </p>
+            )}
+          </div>
+
+          {/* Instrument rail. Second in source order, so on a narrow screen the
+              question comes first and the supporting detail follows it; pinned to
+              the right column above lg. The reading itself is not down here on
+              mobile — it is in the sticky strip above, always in view. */}
+          <aside className="lg:sticky lg:top-10 lg:col-start-2 lg:row-start-1 lg:self-start">
+            <div className="hidden border border-rule bg-surface p-6 lg:block">
+              <RiskMeter
+                probability={probability}
+                band={band}
+                sequence={step.n_answered}
+                settled={settled}
+              />
             </div>
 
-            {/* instrument rail */}
-            <aside className="lg:sticky lg:top-10 lg:self-start">
-              <div className="border border-rule bg-surface p-6">
-                <RiskMeter
-                  probability={result?.probability ?? step.probability}
-                  band={result?.risk_band ?? step.risk_band}
-                  sequence={step.n_answered}
-                  settled={Boolean(result)}
-                />
-              </div>
+            <div className="border border-rule bg-surface p-6 lg:mt-5">
+              <ProgressTrack step={step} settled={settled} />
+            </div>
 
-              {result && result.flagged_fields.length > 0 && (
-                <div className="mt-5 border border-rule bg-surface p-6">
-                  <FlaggedFields fields={result.flagged_fields} />
-                </div>
-              )}
-
-              <div className="mt-5 px-1">
-                <div className="flex items-baseline justify-between text-[11px] text-ink-muted">
-                  <span className="eyebrow">Progress</span>
-                  <span className="tnum">
-                    {step.n_answered} of up to {step.max_questions}
-                  </span>
-                </div>
-                <div className="mt-2 flex gap-1">
-                  {Array.from({ length: step.max_questions }, (_, i) => (
-                    <span
-                      key={i}
-                      className="h-[3px] flex-1"
-                      style={{
-                        background:
-                          i < step.n_answered ? "var(--accent)" : "var(--surface-sunk)",
-                      }}
-                    />
-                  ))}
-                </div>
-                {result?.stop_reason && (
-                  <p className="mt-3 text-[11.5px] leading-relaxed text-ink-muted">
-                    Stopped early: {result.stop_reason.replaceAll("_", " ")}.
-                  </p>
-                )}
+            {result && result.flagged_fields.length > 0 && (
+              <div className="mt-5 border border-rule bg-surface p-6">
+                <FlaggedFields fields={result.flagged_fields} />
               </div>
-            </aside>
-          </div>
-        )}
+            )}
+          </aside>
+        </div>
       </main>
 
-      <footer className="rule-t mt-12">
-        <div className="mx-auto max-w-[1180px] px-6 py-6 text-[11.5px] leading-relaxed text-ink-muted sm:px-10">
-          A second check for clinic staff, not a replacement for their judgement. Risk and
-          reason code come from gradient-boosted trees; the plain-language reading is written
-          by Qwen from those figures and cannot alter them.
-        </div>
-      </footer>
+      <Footer />
     </div>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="rule-t mt-12">
+      <div className="mx-auto max-w-[1180px] px-6 py-6 text-[11.5px] leading-relaxed text-ink-muted sm:px-10">
+        A second check for clinic staff, not a replacement for their judgement. Risk and
+        reason code come from gradient-boosted trees; the plain-language reading is written
+        by Qwen from those figures and cannot alter them.
+      </div>
+    </footer>
   );
 }
