@@ -2,7 +2,7 @@
 
 **A claim rejection risk predictor for private clinics in Pakistan.**
 
-Before a clinic submits a bill to an insurer or TPA, this tool looks at the claim and tells staff, in plain Urdu or English: how likely it is to bounce, which specific field is the problem, and what to fix. Think spell-check, but for insurance claims instead of prose.
+Before a clinic submits a bill to an insurer or TPA, this tool looks at the claim and tells staff, in plain English: how likely it is to bounce, which specific field is the problem, and what to fix. Think spell-check, but for insurance claims instead of prose.
 
 Built for [Bano Qabil AI hackathon] by Mirza Ahsan Baig and Safee.
 
@@ -19,7 +19,7 @@ Enough of that adds up to clinics quietly raising prices, dropping insurance pat
 1. Staff starts entering a claim — procedure, diagnosis, insurer, pre-auth status, and so on.
 2. Instead of one long form, the tool asks one question at a time, picking whichever question would tell it the most given what it already knows. A clean, obvious claim might only need three questions; a messy one needs more.
 3. Once it's confident, it shows a rejection probability, the specific fields driving that risk, and — if the claim looks headed for rejection — which real CARC code it's likely to get hit with.
-4. Qwen turns that into a sentence or two of plain-language advice, in Urdu or English, without touching the actual prediction.
+4. Qwen turns that into a sentence or two of plain-language advice, without touching the actual prediction.
 5. Staff can mark a prediction wrong. That gets logged as feedback, the seed of a real retraining loop.
 
 ## Why the data is synthetic
@@ -55,12 +55,14 @@ A partner clinic or TPA's actual historical claims with actual outcomes, parsed 
 ## Architecture
 
 ```
-frontend/     Next.js — one question at a time, live risk indicator, Urdu/English toggle
+frontend/     Next.js — one question at a time, live risk indicator, per-field attribution
 backend/      FastAPI — session state, the adaptive loop, Qwen calls
 ml/           dataset build, feature definitions, training, calibration, evaluation
 data/         the CARC code reference table
 models/       trained model artifacts + metadata.json (metrics, feature priors, thresholds)
-docs/         model card and data provenance, written for anyone auditing the numbers
+scripts/      standalone DashScope connectivity check
+tests/        20 tests — the adaptive engine and the API contract
+docs/         model card, data provenance, demo script, deployment runbook, deck
 ```
 
 - **Risk model:** LightGBM, binary classification, isotonic calibration, decision threshold tuned on the validation split.
@@ -70,30 +72,74 @@ docs/         model card and data provenance, written for anyone auditing the nu
 
 ## Running it
 
-Backend:
+Needs Python 3.12+ and Node 20+.
+
+**First time — data and models.** Synthea's sample bundle isn't vendored (63MB), so pull it
+before building anything:
+
 ```bash
-pip install -e .
-cp .env.example .env   # fill in DASHSCOPE_API_KEY
-uvicorn backend.main:app --reload
+uv venv --python 3.12
+uv pip install -e ".[dev]"
+
+cp .env.example .env        # fill in DASHSCOPE_API_KEY and DASHSCOPE_BASE_URL
+uv run python scripts/test_dashscope.py     # confirms Qwen end to end before you rely on it
+
+mkdir -p data/raw
+curl -L -o data/raw/synthea.zip \
+  https://synthetichealth.github.io/synthea-sample-data/downloads/latest/synthea_sample_data_csv_latest.zip
+unzip -q data/raw/synthea.zip -d data/raw && rm data/raw/synthea.zip
+
+uv run python ml/build_dataset.py    # Synthea CSVs   -> claims_base.parquet
+uv run python ml/label_carc.py       # rejection labels -> claims.parquet
+uv run python ml/train.py            # -> models/
+uv run python ml/evaluate.py         # regenerates docs/model-card.md
 ```
 
-Frontend:
+The whole pipeline takes about two minutes. `data/` and `models/` are gitignored — they're
+rebuilt from the commands above, not stored.
+
+**Then, two processes:**
+
 ```bash
-cd frontend
-npm install
-npm run dev
+uv run uvicorn backend.main:app --reload --port 8000    # API → :8000
+cd frontend && npm install && npm run dev               # UI  → :3000
 ```
 
-Rebuilding the dataset and model from scratch:
-```bash
-python ml/build_dataset.py
-python ml/label_carc.py
-python ml/train.py
-python ml/evaluate.py   # regenerates docs/model-card.md
-```
+Open <http://localhost:3000>. Set `NEXT_PUBLIC_API_URL` if the API isn't on port 8000.
 
-Tests: `pytest`
+**Tests:** `uv run pytest -q` — 20 tests covering the adaptive engine and the API contract.
+The API tests make a real Qwen call, so `.env` has to be filled in for the full suite to pass.
+`cd frontend && npx tsc --noEmit` for the frontend.
+
+**Containers:** `docker compose --env-file .env up --build` brings up both. The backend image
+trains its own models during the build, so nothing needs shipping alongside it. The ECS
+runbook is in [`docs/deployment.md`](docs/deployment.md) — note the images are written but
+have not been built or deployed yet.
 
 ## Two demo claims, on purpose
 
 The demo walks through one claim that should come back risky, for a specific traceable reason (no pre-authorization on a Rs. 185,000 minor surgery), and one clean one — same question flow, no shortcuts — so it's obvious the tool isn't just flagging everything it sees. `GET /api/demo/risky` and `GET /api/demo/clean`.
+
+## What we cut, on purpose
+
+Urdu output. The original plan had an Urdu/English toggle; we scoped it out to keep the demo
+tight and the copy consistent. The Qwen layer still takes the target language as a parameter,
+so it's a small change to put back rather than a rewrite — see
+[`backend/services/explain_qwen.py`](backend/services/explain_qwen.py).
+
+Also deliberately absent: auth, user accounts, a database, and live retraining. This is a
+demo, and the places where a real product would need more are written down rather than
+papered over.
+
+## Where everything is documented
+
+| | |
+|---|---|
+| [`docs/model-card.md`](docs/model-card.md) | Every number, confusion matrix, calibration table, per-code accuracy, known limitations |
+| [`docs/data-provenance.md`](docs/data-provenance.md) | Exactly what's real (Synthea, X12) and what's ours (the labels) |
+| [`docs/demo-script.md`](docs/demo-script.md) | The 3-minute walkthrough, with prepared answers to the questions judges actually ask |
+| [`docs/architecture.svg`](docs/architecture.svg) | Offline pipeline and runtime path on one page |
+| [`docs/deployment.md`](docs/deployment.md) | ECS runbook, nginx config, and the five things likely to bite |
+| [`docs/project-description.md`](docs/project-description.md) | The written submission |
+| `docs/deck.pdf` / `docs/deck.pptx` | 8 slides, both generated from `docs/build_deck.py` |
+| [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | The build log — every phase, and every problem found and fixed along the way |
