@@ -28,19 +28,22 @@ out/
 npm-debug.log*
 yarn-error.log*
 
-# ---- Data & models (large / regenerable) ----
+# ---- Data & models ----
+# The raw Synthea bundle is fetched (scripts/fetch_synthea.py) and the intermediate table
+# rebuilt. The final labelled dataset and the trained models are committed: the demo, the
+# tests and the published numbers all depend on exactly these files.
 data/raw/
-data/processed/
-models/*.txt
-models/*.pkl
-models/*.joblib
-models/*.parquet
-!models/.gitkeep
+data/processed/*
+!data/processed/claims.parquet
 
 # ---- Runtime artifacts ----
 *.db
 *.sqlite3
 backend/feedback.db
+
+# ---- Local tooling ----
+# MCP servers are per-developer setup, not part of the product.
+.mcp.json
 
 # ---- OS / editor ----
 .DS_Store
