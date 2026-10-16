@@ -11,7 +11,7 @@
       "trigger": "OURS - the condition our rules-based labeller uses to assign this code",
       "staff_action": "OURS - the fix suggested to the user"
     },
-    "note": "These 12 codes are the subset relevant to a Pakistani private-clinic outpatient context. The full X12 list is far larger; we scope down deliberately rather than modelling codes our synthetic data cannot express."
+    "note": "These 13 codes are the subset relevant to a Pakistani private-clinic outpatient context. The full X12 list is far larger; we scope down deliberately rather than modelling codes our synthetic data cannot express. Code 7 was added and verified against x12.org on 2026-10-17; the other twelve were verified on 2026-09-05."
   },
   "codes": [
     {
@@ -88,8 +88,15 @@
       "code": "6",
       "official_description": "The procedure/revenue code is inconsistent with the patient's age.",
       "plain_english": "This procedure does not match the patient's age group.",
-      "trigger": "procedure restricted to an age band the patient is not in",
+      "trigger": "procedure restricted to an age range the patient is not in (obstetric care outside 12-55)",
       "staff_action": "Re-check the procedure code and the patient's recorded date of birth."
+    },
+    {
+      "code": "7",
+      "official_description": "The procedure/revenue code is inconsistent with the patient's gender.",
+      "plain_english": "This procedure does not match the patient's recorded sex.",
+      "trigger": "procedure restricted to one sex billed for a patient of the other (obstetric care for a male patient)",
+      "staff_action": "Re-check the procedure code and the patient's recorded sex before submitting."
     },
     {
       "code": "151",

@@ -43,8 +43,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from ml.features import (AMOUNT_EXCESSIVE_RATIO, ASKABLE_FEATURES,  # noqa: E402
-                         CONTEXT_FEATURES, ELECTIVE_CATEGORIES, NUMERIC_FEATURES,
-                         TIER_EXCLUSIONS, build_reference, derive_frame)
+                         CONTEXT_FEATURES, ELECTIVE_CATEGORIES, HIGH_FREQUENCY_CLAIMS,
+                         NUMERIC_FEATURES, TIER_EXCLUSIONS, build_reference, derive_frame)
 
 PROC = ROOT / "data" / "processed"
 
@@ -96,12 +96,14 @@ RULES: list[tuple[str, str, float]] = [
     ("16",  "_docs_missing",               0.55),
     ("16",  "_docs_partial",               0.20),
     ("11",  "_dx_proc_mismatch",           0.38),
+    # One rule, two codes: X12 uses 7 for a procedure inconsistent with the patient's
+    # gender and 6 for their age (see `_split_patient_conflict`). Kept as a single rule so
+    # adding code 7 did not shift the random draws every later rule and the noise use.
     ("6",   "_procedure_patient_conflict", 0.55),
     ("45",  "_amount_excessive",           0.26),
     ("151", "_high_frequency",             0.30),
 ]
 
-HIGH_FREQUENCY_CLAIMS = 4
 
 
 def corrupt(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
@@ -115,7 +117,7 @@ def corrupt(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
     wrong_dx = rng.random(n) < 0.045
     all_dx = np.sort(df.diagnosis_category.unique())
     df.loc[wrong_dx, "diagnosis_category"] = rng.choice(all_dx, size=wrong_dx.sum())
-    # A procedure code that cannot apply to this patient (CARC 6).
+    # A procedure code that cannot apply to this patient (CARC 6 for age, 7 for gender).
     wrong_proc = rng.random(n) < 0.02
     df.loc[wrong_proc, "procedure_category"] = "obstetric_maternity"
     return df
@@ -184,6 +186,13 @@ def build_conditions(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _split_patient_conflict(codes: np.ndarray, male: np.ndarray) -> np.ndarray:
+    """Obstetric care billed for a man is a gender conflict (CARC 7), not an age one (6)."""
+    codes = codes.copy()
+    codes[(codes == "6") & male] = "7"
+    return codes
+
+
 def apply_rules(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
     n = len(df)
     carc = np.array([None] * n, dtype=object)
@@ -217,7 +226,7 @@ def apply_rules(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
     source[flip] = "noise"
 
     df["is_rejected"] = rejected
-    df["carc_code"] = carc
+    df["carc_code"] = _split_patient_conflict(carc, (df.patient_gender == "M").to_numpy())
     df["label_source"] = source
     return df
 

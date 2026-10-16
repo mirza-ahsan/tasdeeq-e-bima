@@ -129,6 +129,46 @@ ELECTIVE_CATEGORIES = ("dental", "preventive_screening", "imaging", "physiothera
 
 # A bill this many times the procedure's typical amount gets queried (CARC 45).
 AMOUNT_EXCESSIVE_RATIO = 2.5
+# This many other claims in 30 days triggers a frequency review (CARC 151).
+HIGH_FREQUENCY_CLAIMS = 4
+
+# The defects that justify each reason code, in adjudication priority order: an insurer
+# reports the most fundamental reason when several apply. The labeller fires these rules
+# (probabilistically), and the API names a reason only when one of them is actually present
+# in what the clerk entered — never because a field nobody asked about *might* be wrong.
+REASON_ORDER = ["27", "18", "197", "29", "109", "96", "50", "16", "11", "7", "6", "45", "151"]
+
+
+def _val(row: dict, key: str):
+    v = row.get(key)
+    return None if v is None or (isinstance(v, float) and v != v) else v
+
+
+def defect_codes(row: dict) -> list[str]:
+    """Reason codes whose defect is present in a claim, in priority order.
+
+    `row` holds raw and derived values (see derive_frame); unknown fields are None or NaN
+    and never count as a defect.
+    """
+    proc, tier = _val(row, "procedure_category"), _val(row, "plan_tier")
+    conflict = _val(row, "procedure_patient_conflict") == 1
+    present = {
+        "27": _val(row, "patient_policy_active") in (False, 0),
+        "18": _val(row, "is_duplicate_submission") in (True, 1),
+        "197": _val(row, "pre_auth_obtained") == "no",
+        "29": (_val(row, "days_vs_insurer_filing_limit") or 0) > 1.0,
+        "109": _val(row, "provider_network_status") == "out_of_network",
+        "96": tier is not None and proc in TIER_EXCLUSIONS.get(tier, ()),
+        "50": (tier == "basic" and proc in ELECTIVE_CATEGORIES
+               and _val(row, "is_emergency") not in (True, 1)),
+        "16": _val(row, "documents_complete") in ("partial", "missing"),
+        "11": _val(row, "diagnosis_procedure_match") == 0,
+        "7": conflict and _val(row, "patient_gender") == "M",
+        "6": conflict and _val(row, "patient_gender") != "M",
+        "45": (_val(row, "amount_vs_procedure_median") or 0) > AMOUNT_EXCESSIVE_RATIO,
+        "151": (_val(row, "prior_claims_30d") or 0) >= HIGH_FREQUENCY_CLAIMS,
+    }
+    return [code for code in REASON_ORDER if present[code]]
 
 
 def diagnosis_matches(procedure: str, diagnosis: str) -> bool:
