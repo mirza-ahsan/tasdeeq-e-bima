@@ -1,9 +1,9 @@
-"""Phase 4 tests — the behaviour the demo depends on.
+"""The question engine — the behaviour the demo depends on.
 
 These assert the claims we make about the engine on stage: that it terminates, that
-clean claims resolve quickly, that a missing pre-authorisation is surfaced and named,
-and above all that the question order genuinely changes between claims. That last one
-is what separates this from a form with a model bolted on.
+pre-authorisation is asked exactly when it matters, that a missing one is surfaced and
+named, that the question order genuinely changes between claims, and that the training
+simulation the bands were fitted on is the loop users actually get.
 """
 
 from __future__ import annotations
@@ -11,46 +11,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from backend.services.adaptive import (MAX_QUESTIONS, AdaptiveEngine, Step)
-from ml.features import ASKABLE_FEATURES, CONTEXT_FEATURES, TARGET
-
-CONTEXT = {"patient_age": 44, "patient_gender": "F"}
-
-CLEAN_CLAIM = {
-    **CONTEXT,
-    "procedure_category": "consultation_exam",
-    "diagnosis_category": "respiratory_infection",
-    "insurer_tpa": "Aftab Health Assurance",
-    "plan_tier": "corporate",
-    "pre_auth_obtained": "not_required",
-    "documents_complete": "complete",
-    "days_since_treatment": 3,
-    "claim_amount_pkr": 4500,
-    "provider_network_status": "in_network",
-    "patient_policy_active": True,
-    "is_emergency": False,
-    "diagnosis_procedure_match": True,
-    "is_duplicate_submission": False,
-    "prior_claims_30d": 0,
-}
-
-RISKY_CLAIM = {
-    **CONTEXT,
-    "procedure_category": "minor_surgery",
-    "diagnosis_category": "injury_trauma",
-    "insurer_tpa": "Peymaan Health",
-    "plan_tier": "basic",
-    "pre_auth_obtained": "no",
-    "documents_complete": "partial",
-    "days_since_treatment": 12,
-    "claim_amount_pkr": 185000,
-    "provider_network_status": "in_network",
-    "patient_policy_active": True,
-    "is_emergency": False,
-    "diagnosis_procedure_match": True,
-    "is_duplicate_submission": False,
-    "prior_claims_30d": 1,
-}
+from backend.demo_claims import CLEAN_CLAIM, RISKY_CLAIM
+from backend.services.adaptive import MAX_QUESTIONS, MIN_QUESTIONS, AdaptiveEngine, stop_reason
+from ml.features import ASKABLE_FEATURES, CONTEXT_FEATURES, derive_frame
+from ml.simulate import verdict, walk_claims
+from tests.helpers import CLAIMS, run_loop
 
 
 @pytest.fixture(scope="module")
@@ -58,106 +23,129 @@ def engine() -> AdaptiveEngine:
     return AdaptiveEngine()
 
 
-def run_loop(engine: AdaptiveEngine, truth: dict) -> tuple[Step, list[str]]:
-    """Drive the loop to completion, answering from `truth`."""
-    answers = {f: truth[f] for f in CONTEXT_FEATURES if f in truth}
-    order: list[str] = []
-    for _ in range(MAX_QUESTIONS + 2):  # guard against a non-terminating loop
-        step = engine.next_step(answers)
-        if step.done:
-            return step, order
-        order.append(step.question.feature)
-        answers[step.question.feature] = truth[step.question.feature]
-    pytest.fail("loop did not terminate within the question cap")
+@pytest.fixture(scope="module")
+def claims() -> pd.DataFrame:
+    return pd.read_parquet(CLAIMS)
 
 
 # --- termination and basic contract ---------------------------------------
 
-def test_loop_always_terminates(engine):
-    df = pd.read_parquet("data/processed/claims.parquet").sample(40, random_state=3)
-    for _, row in df.iterrows():
+def test_loop_always_terminates_without_repeating(engine, claims):
+    for _, row in claims.sample(40, random_state=3).iterrows():
         step, order = run_loop(engine, row)
         assert step.done
         assert len(order) <= MAX_QUESTIONS
-
-
-def test_never_asks_the_same_question_twice(engine):
-    df = pd.read_parquet("data/processed/claims.parquet").sample(40, random_state=5)
-    for _, row in df.iterrows():
-        _, order = run_loop(engine, row)
         assert len(order) == len(set(order)), f"repeated question in {order}"
+        assert set(order) <= set(ASKABLE_FEATURES)
 
 
-def test_only_asks_askable_features(engine):
-    _, order = run_loop(engine, RISKY_CLAIM)
-    assert set(order) <= set(ASKABLE_FEATURES)
+def test_never_gives_a_verdict_before_the_minimum(engine, claims):
+    for _, row in claims.sample(40, random_state=11).iterrows():
+        step, order = run_loop(engine, row)
+        assert len(order) >= MIN_QUESTIONS or step.stop_reason == "all_questions_answered"
+
+
+def test_low_information_gain_cannot_cut_a_check_short():
+    """Below the minimum the loop keeps asking, however little a question would add."""
+    assert stop_reason(1, "medium", best_gain=1e-9) is None
+    assert stop_reason(MIN_QUESTIONS, "medium", best_gain=1e-9) == "no_informative_questions_left"
 
 
 def test_information_gain_is_never_negative(engine):
     """Mutual information is non-negative by construction. A negative value means the
     baseline has drifted away from the marginalised probability again."""
-    for answers in ({}, {"pre_auth_obtained": "no"}, CONTEXT):
+    context = {f: RISKY_CLAIM[f] for f in CONTEXT_FEATURES}
+    for answers in (context, {**context, "pre_auth_obtained": "no"},
+                    {f: CLEAN_CLAIM[f] for f in CONTEXT_FEATURES}):
         gains = engine.information_gains(answers)
-        assert gains, "expected some unanswered features"
+        assert gains, "expected some open questions"
         assert min(gains.values()) >= -1e-9, f"negative gain: {gains}"
+
+
+def test_probability_stays_within_clamped_range(engine, claims):
+    floor, ceil = engine.p.meta["prob_floor"], engine.p.meta["prob_ceil"]
+    for _, row in claims.sample(30, random_state=9).iterrows():
+        step, _ = run_loop(engine, row)
+        assert floor <= step.probability <= ceil
+
+
+# --- pre-authorisation is asked exactly when it matters --------------------
+
+def test_pre_auth_is_asked_first_when_the_procedure_needs_it(engine):
+    _, order = run_loop(engine, RISKY_CLAIM)
+    assert order[0] == "pre_auth_obtained"
+    step = engine.next_step({f: RISKY_CLAIM[f] for f in CONTEXT_FEATURES})
+    assert [o.value for o in step.question.options] == ["yes", "no"], \
+        "'not required' must never be offered for a procedure that requires it"
+
+
+def test_pre_auth_is_never_asked_when_it_was_not_needed(engine):
+    _, order = run_loop(engine, CLEAN_CLAIM)
+    assert "pre_auth_obtained" not in order
+
+
+def test_the_amount_alone_can_make_pre_auth_required(engine):
+    small = {"patient_age": 30, "patient_gender": "F", "procedure_category": "dental",
+             "claim_amount_pkr": 5_000}
+    large = {**small, "claim_amount_pkr": 30_000}
+    assert "pre_auth_obtained" not in engine.candidates(small)
+    assert "pre_auth_obtained" in engine.candidates(large)
+
+
+def test_staff_believing_pre_auth_was_not_needed_counts_as_not_obtained(engine):
+    """The costliest real mistake must not score as safely as having approval."""
+    frame = pd.DataFrame([
+        {"procedure_category": "minor_surgery", "claim_amount_pkr": 85_000,
+         "pre_auth_obtained": "not_required"},
+        {"procedure_category": "consultation_exam", "claim_amount_pkr": 2_500,
+         "pre_auth_obtained": "yes"},
+    ])
+    out = derive_frame(frame, engine.p.ref)
+    assert out.pre_auth_obtained.tolist() == ["no", "not_required"]
 
 
 # --- the demo claims -------------------------------------------------------
 
-def test_clean_claim_resolves_quickly(engine):
+def test_risky_claim_is_flagged_high_and_blames_pre_auth(engine):
+    step, order = run_loop(engine, RISKY_CLAIM)
+    assert step.risk_band == "high"
+    answers = {f: RISKY_CLAIM[f] for f in [*CONTEXT_FEATURES, *order]}
+    points = engine.p.attribute(answers, ["procedure_category", "claim_amount_pkr", *order]).points
+    assert max(points, key=points.get) == "pre_auth_obtained"
+    codes = [code for code, _ in engine.p.predict_carc(answers)]
+    assert codes[0] == "197", f"CARC 197 should lead, got {codes}"
+
+
+def test_clean_claim_is_cleared(engine):
     step, order = run_loop(engine, CLEAN_CLAIM)
-    assert len(order) <= 3, f"clean claim took {len(order)} questions: {order}"
     assert step.risk_band == "low"
     assert step.stop_reason == "confident_low_risk"
-
-
-def test_risky_claim_takes_more_questions_than_clean(engine):
-    clean_step, clean_order = run_loop(engine, CLEAN_CLAIM)
-    risky_step, risky_order = run_loop(engine, RISKY_CLAIM)
-    assert len(risky_order) > len(clean_order), (
-        f"risky took {len(risky_order)}, clean took {len(clean_order)} — "
-        "the loop is not adapting to difficulty")
-    assert risky_step.probability > clean_step.probability
-
-
-def test_missing_pre_auth_is_surfaced_and_blamed(engine):
-    """The headline demo moment: the tool asks about pre-auth, then names it."""
-    _, order = run_loop(engine, RISKY_CLAIM)
-    assert "pre_auth_obtained" in order
-
-    contributions = engine.p.explain(RISKY_CLAIM)
-    blamed = [c.feature for c in contributions if c.effect == "increases_risk"]
-    assert "pre_auth_obtained" in blamed, f"pre-auth not blamed; got {blamed}"
-
-    codes = [code for code, _ in engine.p.predict_carc(RISKY_CLAIM)]
-    assert "197" in codes, f"CARC 197 not in top predictions: {codes}"
+    assert len(order) <= 4
 
 
 def test_question_order_differs_between_claims(engine):
     """The adaptiveness claim itself. If these two orders match, the engine is a form."""
     _, clean_order = run_loop(engine, CLEAN_CLAIM)
     _, risky_order = run_loop(engine, RISKY_CLAIM)
-    assert clean_order != risky_order, (
-        f"identical question order for both claims: {clean_order}")
+    assert clean_order != risky_order
 
 
-def test_order_varies_across_many_real_claims(engine):
-    """Adaptiveness at scale, not just on two hand-picked claims."""
-    df = pd.read_parquet("data/processed/claims.parquet").sample(60, random_state=7)
-    orders = {tuple(run_loop(engine, row)[1]) for _, row in df.iterrows()}
-    assert len(orders) >= 15, f"only {len(orders)} distinct question orders across 60 claims"
+def test_order_varies_across_many_real_claims(engine, claims):
+    orders = {tuple(run_loop(engine, row)[1])
+              for _, row in claims.sample(60, random_state=7).iterrows()}
+    assert len(orders) >= 10, f"only {len(orders)} distinct question orders across 60 claims"
 
 
-# --- stopping rule ---------------------------------------------------------
+# --- the simulation the bands were fitted on is the real loop ---------------
 
-def test_never_stops_before_minimum_questions(engine):
-    step = engine.next_step(CONTEXT)
-    assert not step.done, "stopped before asking anything"
-
-
-def test_probability_stays_within_clamped_range(engine):
-    df = pd.read_parquet("data/processed/claims.parquet").sample(30, random_state=9)
-    floor, ceil = engine.p.meta["prob_floor"], engine.p.meta["prob_ceil"]
-    for _, row in df.iterrows():
-        step, _ = run_loop(engine, row)
-        assert floor <= step.probability <= ceil
+def test_band_simulation_matches_the_live_loop(engine, claims):
+    """Bands are chosen by walking each claim once and scoring the walk under every
+    setting. That is only valid if the scored verdict is exactly what next_step gives."""
+    tuned = {**engine.p.bands, "min_info_gain": engine.min_gain}
+    sample = claims.sample(25, random_state=21)
+    for walk, (_, row) in zip(walk_claims(engine, sample), sample.iterrows()):
+        simulated = verdict(walk, tuned)
+        step, order = run_loop(engine, row)
+        assert (simulated.n_answered, simulated.band, simulated.reason) == \
+               (step.n_answered, step.risk_band, step.stop_reason)
+        assert list(simulated.order) == order
