@@ -1,23 +1,33 @@
 # Local parity with the deployed setup.
 #   docker compose --env-file .env up --build
+#
+# The browser only ever talks to the web app; the web app's /api route proxies to the
+# API over the compose network, so there is one origin and no CORS to configure. Both
+# ports bind to localhost only: on a server, nginx in front of :3000 is the public door.
 services:
   api:
     build: .
-    ports: ["8000:8000"]
     environment:
       DASHSCOPE_API_KEY:      ${DASHSCOPE_API_KEY:?set DASHSCOPE_API_KEY in .env}
       DASHSCOPE_BASE_URL:     ${DASHSCOPE_BASE_URL:?set DASHSCOPE_BASE_URL in .env}
       DASHSCOPE_WORKSPACE_ID: ${DASHSCOPE_WORKSPACE_ID:-}
       QWEN_MODEL:             ${QWEN_MODEL:-qwen-plus}
+      # The web proxy forwards the visitor's address; per-client rate limits key on it.
+      TRUST_PROXY_HEADERS:    "true"
+    volumes:
+      - feedback:/data          # the correction log survives redeploys
+    ports: ["127.0.0.1:8000:8000"]
     restart: unless-stopped
 
   web:
-    build:
-      context: ./frontend
-      args:
-        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
-    ports: ["3000:3000"]
+    build: ./frontend
+    environment:
+      API_URL: http://api:8000
+    ports: ["127.0.0.1:3000:3000"]
     depends_on:
       api:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  feedback:
