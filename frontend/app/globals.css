@@ -1,137 +1,250 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   Design language: clinical instrument, not consumer SaaS.
+   Claim Check — design tokens.
 
-   Warm paper ground, ink text, hairline rules. No gradients, no floating
-   cards, no glass. Colour carries exactly two meanings and nothing else:
-
-     --accent      an action the user can take, and keyboard focus
-     --risk-*      the model's verdict, on a three-step ordinal scale
-
-   Anything that is neither an action nor a risk reading stays in ink. That
-   rule is what keeps a dense screen readable: when colour appears, it means
-   something.
+   Colour carries four meanings and nothing else:
+     --brand     an action the user can take, and keyboard focus
+     --good/warn/crit   the verdict bands (always with an icon and a label)
+     --up/--down        attribution polarity: raises / lowers the risk
+   Everything else stays in ink. Text never wears a data colour; a dot, bar or
+   icon beside it carries the meaning. Light and dark are each chosen and
+   checked against their own surface (WCAG text >= 4.5:1, marks >= 3:1 except
+   amber, which always ships with an icon and label).
    --------------------------------------------------------------------------- */
 
 :root {
-  /* ink-muted and risk-med are darker than they look like they should be: at the
-     11-13px sizes they are actually used at, the lighter values measured 4.2:1 and
-     3.3:1 against paper, under the 4.5:1 floor. */
-  --paper:        #faf9f6;
-  --surface:      #ffffff;
-  --surface-sunk: #f3f1ea;
-  --ink:          #17150f;
-  --ink-soft:     #4a463b;
-  --ink-muted:    #6f6a5a;
-  --rule:         #e2ded2;
-  --rule-strong:  #cdc7b6;
-  --accent:       #1f4b43;
-  --accent-soft:  #e7efec;
-  --risk-low:     #4a7c59;
-  --risk-med:     #8a6318;
-  --risk-high:    #a34a32;
-  --risk-low-wash:  #eef3ef;
-  --risk-med-wash:  #f7f0e0;
-  --risk-high-wash: #f6ebe6;
+  color-scheme: light;
+  --bg:            #f6f6f3;
+  --surface:       #ffffff;
+  --surface-2:     #f1f2ee;
+  --surface-3:     #e8eae5;
+  --border:        rgba(14, 20, 18, 0.09);
+  --border-strong: rgba(14, 20, 18, 0.17);
+  --ink:           #0e1412;
+  --ink-2:         #3e4945;
+  --ink-3:         #5f6a66;
+  --brand:         #0b5d4b;
+  --brand-hover:   #0a4f40;
+  --brand-ink:     #ffffff;
+  --brand-wash:    #e3f0eb;
+  --brand-line:    #9ccbbb;
+  --glow-1:        rgba(19, 151, 112, 0.16);
+  --glow-2:        rgba(42, 120, 214, 0.10);
+  --good:          #0ca30c;
+  --good-ink:      #0b6b2e;
+  --good-wash:     #e6f4e6;
+  --warn:          #fab219;
+  --warn-ink:      #7a4f00;
+  --warn-wash:     #fdf1d6;
+  --crit:          #d03b3b;
+  --crit-ink:      #a12828;
+  --crit-wash:     #fbe8e8;
+  --up:            #e34948;
+  --down:          #2a78d6;
+  --grid:          #e6e7e2;
+  --axis:          #c9ccc4;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 22, 0.05);
+  --shadow-md: 0 1px 2px rgba(16, 24, 22, 0.04), 0 8px 24px -12px rgba(16, 24, 22, 0.14);
+  --shadow-lg: 0 2px 4px rgba(16, 24, 22, 0.04), 0 24px 48px -20px rgba(16, 24, 22, 0.22);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --paper:        #14130f;
-    --surface:      #1b1a15;
-    --surface-sunk: #211f19;
-    --ink:          #efede5;
-    --ink-soft:     #c4bfb0;
-    --ink-muted:    #8b8574;
-    --rule:         #302e27;
-    --rule-strong:  #433f35;
-    --accent:       #7fb3a6;
-    --accent-soft:  #1e2b28;
-    --risk-low:     #7fa987;
-    --risk-med:     #cfa64f;
-    --risk-high:    #cd7256;
-    --risk-low-wash:  #1a231c;
-    --risk-med-wash:  #26200f;
-    --risk-high-wash: #271812;
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg:            #0b0f0e;
+    --surface:       #121816;
+    --surface-2:     #182120;
+    --surface-3:     #212c2a;
+    --border:        rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.15);
+    --ink:           #ecf1ef;
+    --ink-2:         #b9c4c0;
+    --ink-3:         #8b9893;
+    --brand:         #34c79a;
+    --brand-hover:   #4fd6ab;
+    --brand-ink:     #04130e;
+    --brand-wash:    #10261f;
+    --brand-line:    #1f5a47;
+    --glow-1:        rgba(52, 199, 154, 0.12);
+    --glow-2:        rgba(57, 135, 229, 0.10);
+    --good-ink:      #5bd47a;
+    --good-wash:     #10251a;
+    --warn-ink:      #f5c451;
+    --warn-wash:     #2a2110;
+    --crit-ink:      #f08a8a;
+    --crit-wash:     #2c1616;
+    --up:            #e66767;
+    --down:          #3987e5;
+    --grid:          #1f2826;
+    --axis:          #33403d;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 28px -14px rgba(0, 0, 0, 0.7);
+    --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.35), 0 28px 56px -24px rgba(0, 0, 0, 0.8);
   }
 }
 
-@theme inline {
-  --color-paper:        var(--paper);
-  --color-surface:      var(--surface);
-  --color-surface-sunk: var(--surface-sunk);
-  --color-ink:          var(--ink);
-  --color-ink-soft:     var(--ink-soft);
-  --color-ink-muted:    var(--ink-muted);
-  --color-rule:         var(--rule);
-  --color-rule-strong:  var(--rule-strong);
-  --color-accent:       var(--accent);
-  --color-accent-soft:  var(--accent-soft);
-  --color-risk-low:     var(--risk-low);
-  --color-risk-med:     var(--risk-med);
-  --color-risk-high:    var(--risk-high);
-  --font-sans:    var(--font-plex-sans);
-  --font-mono:    var(--font-plex-mono);
-  --font-display: var(--font-newsreader);
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:            #0b0f0e;
+  --surface:       #121816;
+  --surface-2:     #182120;
+  --surface-3:     #212c2a;
+  --border:        rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --ink:           #ecf1ef;
+  --ink-2:         #b9c4c0;
+  --ink-3:         #8b9893;
+  --brand:         #34c79a;
+  --brand-hover:   #4fd6ab;
+  --brand-ink:     #04130e;
+  --brand-wash:    #10261f;
+  --brand-line:    #1f5a47;
+  --glow-1:        rgba(52, 199, 154, 0.12);
+  --glow-2:        rgba(57, 135, 229, 0.10);
+  --good-ink:      #5bd47a;
+  --good-wash:     #10251a;
+  --warn-ink:      #f5c451;
+  --warn-wash:     #2a2110;
+  --crit-ink:      #f08a8a;
+  --crit-wash:     #2c1616;
+  --up:            #e66767;
+  --down:          #3987e5;
+  --grid:          #1f2826;
+  --axis:          #33403d;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 28px -14px rgba(0, 0, 0, 0.7);
+  --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.35), 0 28px 56px -24px rgba(0, 0, 0, 0.8);
 }
+
+@theme inline {
+  --color-bg:            var(--bg);
+  --color-surface:       var(--surface);
+  --color-surface-2:     var(--surface-2);
+  --color-surface-3:     var(--surface-3);
+  --color-line:          var(--border);
+  --color-line-strong:   var(--border-strong);
+  --color-ink:           var(--ink);
+  --color-ink-2:         var(--ink-2);
+  --color-ink-3:         var(--ink-3);
+  --color-brand:         var(--brand);
+  --color-brand-hover:   var(--brand-hover);
+  --color-brand-ink:     var(--brand-ink);
+  --color-brand-wash:    var(--brand-wash);
+  --color-brand-line:    var(--brand-line);
+  --color-good:          var(--good);
+  --color-good-ink:      var(--good-ink);
+  --color-good-wash:     var(--good-wash);
+  --color-warn:          var(--warn);
+  --color-warn-ink:      var(--warn-ink);
+  --color-warn-wash:     var(--warn-wash);
+  --color-crit:          var(--crit);
+  --color-crit-ink:      var(--crit-ink);
+  --color-crit-wash:     var(--crit-wash);
+  --color-up:            var(--up);
+  --color-down:          var(--down);
+  --font-sans:    var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-instrument), ui-serif, Georgia, serif;
+  --shadow-card:  var(--shadow-md);
+  --shadow-float: var(--shadow-lg);
+}
+
+html { background: var(--bg); }
 
 body {
-  background: var(--paper);
+  background: var(--bg);
   color: var(--ink);
-  font-family: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* One visible focus treatment across the whole app, so keyboard position is
-   never ambiguous. */
-:where(a, button, input, [tabindex]):focus-visible {
-  outline: 2px solid var(--accent);
+/* One visible focus treatment across the whole app. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
-  border-radius: 1px;
+  border-radius: 8px;
 }
 
-/* Small-caps section labels, used instead of bold headings. */
+::selection { background: var(--brand-wash); color: var(--ink); }
+
+/* Small uppercase section labels. */
 .eyebrow {
-  font-family: var(--font-plex-mono), ui-monospace, monospace;
   font-size: 0.6875rem;
-  letter-spacing: 0.13em;
+  font-weight: 500;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-muted);
+  color: var(--ink-3);
 }
 
 .tnum { font-variant-numeric: tabular-nums; }
 
-.rule-t { border-top: 1px solid var(--rule); }
-.rule-b { border-bottom: 1px solid var(--rule); }
-
-/* A term the reader may not know, carrying a definition. Dotted underline is
-   the long-standing convention for this and needs no icon. */
-.term {
-  border-bottom: 1px dotted var(--rule-strong);
-  cursor: help;
-  color: inherit;
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-md);
 }
-.term:hover { border-bottom-color: var(--ink-muted); }
 
-/* Motion budget: two animations, both reporting a state change.
-   `rise` marks the arrival of a new question or verdict; `settle` marks a
-   number that has just been recomputed. Nothing else moves. */
+.hairline { border-color: var(--border); }
+
+/* The page's one decorative flourish: a soft glow behind the hero. */
+.hero-glow {
+  background:
+    radial-gradient(60% 50% at 18% 0%, var(--glow-1), transparent 70%),
+    radial-gradient(45% 40% at 92% 12%, var(--glow-2), transparent 70%);
+}
+
+.dot-grid {
+  background-image: radial-gradient(var(--border-strong) 1px, transparent 1px);
+  background-size: 18px 18px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+}
+
+/* A domain term carrying a definition. Dotted underline is the long-standing cue. */
+.term {
+  text-decoration: underline dotted var(--border-strong);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.term:hover { text-decoration-color: var(--ink-3); }
+
+/* Motion: each animation reports a state change. Nothing loops except the live dot. */
 @keyframes rise {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: none; }
 }
-.rise { animation: rise 220ms cubic-bezier(0.22, 0.9, 0.3, 1) both; }
+.rise { animation: rise 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.rise-1 { animation-delay: 60ms; }
+.rise-2 { animation-delay: 120ms; }
+.rise-3 { animation-delay: 180ms; }
+.rise-4 { animation-delay: 240ms; }
 
-@keyframes settle {
-  from { opacity: 0.35; }
-  to   { opacity: 1; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.fade { animation: fade 260ms ease-out both; }
+
+@keyframes live {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand) 45%, transparent); }
+  50%      { box-shadow: 0 0 0 5px transparent; }
 }
-.settle { animation: settle 260ms ease-out both; }
+.live-dot { animation: live 2.4s ease-in-out infinite; }
+
+@keyframes draw { from { stroke-dashoffset: var(--len, 400); } to { stroke-dashoffset: 0; } }
+.draw { stroke-dasharray: var(--len, 400); animation: draw 900ms cubic-bezier(0.3, 0.7, 0.2, 1) both; }
+
+@keyframes grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.grow-x { transform-origin: left center; animation: grow-x 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+@keyframes progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .rise, .settle { animation: none; }
-  * { transition-duration: 1ms !important; }
+  .rise, .fade, .draw, .grow-x, .live-dot { animation: none; }
+  .draw { stroke-dasharray: none; }
+  * { transition-duration: 1ms !important; scroll-behavior: auto !important; }
 }
 
-::selection { background: var(--accent-soft); color: var(--ink); }
+@media print {
+  .no-print { display: none !important; }
+  .card { box-shadow: none; }
+}

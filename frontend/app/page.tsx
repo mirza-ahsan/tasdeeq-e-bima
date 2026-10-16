@@ -1,35 +1,125 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { AnswerLedger } from "@/components/AnswerLedger";
-import { FlaggedFields } from "@/components/FlaggedFields";
-import { Masthead } from "@/components/Masthead";
-import { ProgressTrack } from "@/components/ProgressTrack";
+import { useCallback, useEffect, useState } from "react";
+import { Checks } from "@/components/Checks";
+import { IconAlert, IconRestart } from "@/components/icons";
+import { Intake } from "@/components/Intake";
+import { Landing } from "@/components/Landing";
+import { Ledger } from "@/components/Ledger";
 import { QuestionCard } from "@/components/QuestionCard";
-import { ResultPanel } from "@/components/ResultPanel";
-import { RiskMeter } from "@/components/RiskMeter";
-import { StartScreen } from "@/components/StartScreen";
-import { api } from "@/lib/api";
-import type { Result, Step } from "@/lib/types";
+import { ResultView } from "@/components/ResultView";
+import { RiskPanel } from "@/components/RiskPanel";
+import { TopBar } from "@/components/TopBar";
+import { Trajectory, type TrajectoryPoint } from "@/components/Trajectory";
+import { ApiError, api } from "@/lib/api";
+import { pkr } from "@/lib/format";
+import type { DemoKind, Intake as IntakeValues, Meta, Question, Result, Step } from "@/lib/types";
 
-type DemoKind = "risky" | "clean";
+type View = "landing" | "intake" | "check";
 
-/** A jump this large is worth interrupting the flow for; smaller ones sit in the ledger. */
-const ALERT_POINTS = 8;
+/** Pause between scripted answers, long enough to narrate over. */
+const AUTOPLAY_MS = 1600;
+const AUTOPLAY_AFTER_ALERT_MS = 2800;
+
+function billSummary(step: Step) {
+  return step.claim.map((f) => f.value_label).join(" · ");
+}
+
+function ClaimStrip({ step, demo, onRestart }: { step: Step; demo: DemoKind | null; onRestart: () => void }) {
+  const proc = step.claim.find((f) => f.feature === "procedure_category");
+  const amount = step.claim.find((f) => f.feature === "claim_amount_pkr");
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {demo && (
+        <span className="rounded-full bg-ink px-2.5 py-1 text-[11.5px] font-medium text-bg">
+          {demo === "risky" ? "Demo · risky claim" : "Demo · clean claim"}
+        </span>
+      )}
+      <span className="rounded-full border border-line bg-surface px-3 py-1 text-[12.5px] text-ink-2">{step.patient.label}</span>
+      {proc && <span className="rounded-full border border-line bg-surface px-3 py-1 text-[12.5px] text-ink-2">{proc.value_label}</span>}
+      {amount && (
+        <span className="tnum rounded-full border border-line bg-surface px-3 py-1 text-[12.5px] text-ink-2">
+          {typeof amount.value === "number" ? pkr(amount.value) : amount.value_label}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={onRestart}
+        className="no-print ml-auto inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] text-ink-3 transition hover:bg-surface hover:text-ink"
+      >
+        <IconRestart size={14} /> New check
+      </button>
+    </div>
+  );
+}
+
+function Progress({ step, settled }: { step: Step; settled: boolean }) {
+  const { n_answered: n, min_questions: min, max_questions: max } = step;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <span className="eyebrow">Questions</span>
+        <span className="tnum text-[11.5px] text-ink-3">{n} of at most {max}</span>
+      </div>
+      <div className="mt-2.5 flex gap-[3px]" aria-hidden>
+        {Array.from({ length: max }, (_, i) => (
+          <span
+            key={i}
+            className="h-1.5 flex-1 rounded-full transition-colors duration-300"
+            style={{ background: i < n ? "var(--brand)" : i < min ? "var(--surface-3)" : "var(--surface-2)" }}
+          />
+        ))}
+      </div>
+      <p className="mt-2.5 text-[12px] leading-relaxed text-ink-3">
+        {settled
+          ? "Finished."
+          : n < min
+            ? `${min - n} more before a verdict — no claim is judged on fewer than ${min}.`
+            : "It stops as soon as another answer would not change the verdict."}
+      </p>
+    </div>
+  );
+}
 
 export default function Page() {
+  const [view, setView] = useState<View>("landing");
+  const [meta, setMeta] = useState<Meta | null>(null);
   const [step, setStep] = useState<Step | null>(null);
   const [result, setResult] = useState<Result | null>(null);
-  const [scripted, setScripted] = useState<Record<string, unknown> | null>(null);
-  const [effects, setEffects] = useState<Record<string, number>>({});
-  const [alert, setAlert] = useState<
-    { label: string; valueLabel: string; deltaPoints: number } | null
-  >(null);
+  const [demo, setDemo] = useState<DemoKind | null>(null);
+  const [script, setScript] = useState<Record<string, unknown> | null>(null);
+  const [autoplay, setAutoplay] = useState(false);
+  const [questions, setQuestions] = useState<Record<string, Question>>({});
+  const [history, setHistory] = useState<TrajectoryPoint[]>([]);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; lost: boolean } | null>(null);
 
-  const fail = (e: unknown) =>
-    setError(e instanceof Error ? e.message : "Could not reach the API.");
+  // The intake form and the landing figures come from the trained artefacts.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const load = () =>
+      api.meta().then(
+        (m) => !cancelled && setMeta(m),
+        () => { if (!cancelled) timer = setTimeout(load, 5000); },
+      );
+    load();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, []);
+
+  const fail = (e: unknown) => {
+    const lost = e instanceof ApiError && e.sessionLost;
+    setError({ message: e instanceof Error ? e.message : "Something went wrong.", lost });
+    setAutoplay(false);
+  };
+
+  const remember = (s: Step) => {
+    const q = s.question;
+    if (q) setQuestions((prev) => ({ ...prev, [q.feature]: q }));
+  };
 
   const finish = useCallback(async (sessionId: string) => {
     try {
@@ -39,65 +129,25 @@ export default function Page() {
     }
   }, []);
 
-  const begin = useCallback(
-    async (loader: () => Promise<Step>, script: Record<string, unknown> | null) => {
-      setBusy(true);
-      setError(null);
-      setResult(null);
-      setScripted(script);
-      setEffects({});
-      setAlert(null);
-      try {
-        const first = await loader();
-        setStep(first);
-        if (first.done) await finish(first.session_id);
-      } catch (e) {
-        fail(e);
-        setStep(null);
-      } finally {
-        setBusy(false);
-      }
-    },
-    [finish]
-  );
-
-  const startBlank = () => begin(() => api.start(), null);
-
-  const startDemo = (which: DemoKind) =>
-    begin(async () => {
-      const [first, answers] = await Promise.all([
-        api.startDemo(which),
-        api.demoAnswers(which),
-      ]);
-      setScripted(answers);
-      return first;
-    }, null);
-
-  /**
-   * Each answer is scored by what it did to the estimate: the reading before it
-   * against the reading after. The model reports its current probability at
-   * every turn, so this costs no extra call, and it is what lets a harmful
-   * field be flagged the moment it is entered instead of at the verdict.
-   */
-  async function answer(value: unknown) {
-    if (!step?.question) return;
-    const feature = step.question.feature;
-    const before = Math.round(step.probability * 100);
-
+  async function begin(
+    load: () => Promise<[Step, Record<string, unknown> | null]>,
+    kind: DemoKind | null,
+  ) {
     setBusy(true);
+    setError(null);
     try {
-      const next = await api.answer(step.session_id, feature, value);
-      const delta = Math.round(next.probability * 100) - before;
-      const field = next.answered.find((a) => a.feature === feature);
-
-      setEffects((prev) => ({ ...prev, [feature]: delta }));
-      setAlert(
-        delta >= ALERT_POINTS && field
-          ? { label: field.label, valueLabel: field.value_label, deltaPoints: delta }
-          : null
-      );
-      setStep(next);
-      if (next.done) await finish(next.session_id);
+      const [first, answers] = await load();
+      setDemo(kind);
+      setScript(answers);
+      setAutoplay(kind !== null);
+      setResult(null);
+      setQuestions({});
+      remember(first);
+      setHistory([{ label: "Bill entered", detail: billSummary(first), probability: first.probability }]);
+      setStep(first);
+      setView("check");
+      window.scrollTo({ top: 0 });
+      if (first.done) await finish(first.session_id);
     } catch (e) {
       fail(e);
     } finally {
@@ -105,108 +155,198 @@ export default function Page() {
     }
   }
 
-  function restart() {
+  const startIntake = (values: IntakeValues) =>
+    begin(async () => [await api.start(values), null], null);
+
+  const startDemo = (which: DemoKind) =>
+    begin(() => Promise.all([api.startDemo(which), api.demoAnswers(which)]), which);
+
+  async function submit(feature: string, value: unknown, edit: boolean) {
+    if (!step) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await api.answer(step.session_id, feature, value);
+      remember(next);
+      const field = next.answered.find((a) => a.feature === feature);
+      setHistory((h) => [
+        ...h,
+        {
+          label: edit ? `Changed: ${field?.label ?? feature}` : field?.label ?? feature,
+          detail: `${field?.label ?? feature}: ${field?.value_label ?? String(value)}`,
+          probability: next.probability,
+        },
+      ]);
+      setStep(next);
+      if (next.done) await finish(next.session_id);
+      else setResult(null);
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Demo autoplay: answer each question from the script after a pause.
+  const question = step?.question ?? null;
+  useEffect(() => {
+    if (!autoplay || !script || !question || busy || result || error) return;
+    const value = script[question.feature];
+    if (value === undefined) return;
+    const big = step?.last_change && Math.abs(step.last_change.delta_points) >= 8;
+    const t = setTimeout(() => submit(question.feature, value, false), big ? AUTOPLAY_AFTER_ALERT_MS : AUTOPLAY_MS);
+    return () => clearTimeout(t);
+    // submit is recreated each render; the step it acts on is captured via `question`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoplay, script, question, busy, result, error]);
+
+  function home() {
+    setView("landing");
     setStep(null);
     setResult(null);
-    setScripted(null);
-    setEffects({});
-    setAlert(null);
+    setDemo(null);
+    setScript(null);
+    setAutoplay(false);
+    setHistory([]);
     setError(null);
   }
 
-  if (step === null) {
+  // ---------------------------------------------------------------- views
+
+  if (view === "landing" || (view === "check" && !step)) {
     return (
       <div className="flex min-h-full flex-col">
-        <Masthead />
-        <main className="mx-auto w-full max-w-[1180px] flex-1 px-6 sm:px-10">
-          <StartScreen busy={busy} error={error} onStart={startBlank} onDemo={startDemo} />
+        <TopBar onHome={home} />
+        <main className="flex-1">
+          <Landing
+            meta={meta}
+            busy={busy}
+            error={error?.message ?? null}
+            onStart={() => {
+              setError(null);
+              if (meta) setView("intake");
+              else setError({ message: "The risk service is not reachable right now. Check that the API is running.", lost: false });
+            }}
+            onDemo={startDemo}
+          />
         </main>
         <Footer />
       </div>
     );
   }
 
-  const probability = result?.probability ?? step.probability;
-  const band = result?.risk_band ?? step.risk_band;
+  if (view === "intake" && meta) {
+    return (
+      <div className="flex min-h-full flex-col">
+        <TopBar onHome={home} />
+        <main className="flex-1">
+          <Intake meta={meta} busy={busy} error={error?.message ?? null} onBack={home} onSubmit={startIntake} />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  const s = step!;
   const settled = Boolean(result);
+  const delta = history.length > 1 ? (history.at(-1)!.probability - history.at(-2)!.probability) * 100 : null;
+  const probability = result?.probability ?? s.probability;
+  const band = result?.risk_band ?? s.risk_band;
+  const early = !settled && s.n_answered < s.min_questions;
+
+  const errorBanner = error && (
+    <div role="alert" className="rise flex flex-wrap items-center gap-3 rounded-2xl border border-crit/30 bg-crit-wash px-4 py-3 text-[13.5px] text-crit-ink">
+      <IconAlert size={18} className="shrink-0" />
+      <span className="flex-1">{error.message}</span>
+      {error.lost && (
+        <button type="button" onClick={home} className="rounded-full bg-crit-ink px-3.5 py-1.5 text-[12.5px] font-medium text-bg">
+          Start again
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div className="flex min-h-full flex-col">
-      <Masthead />
+      <TopBar onHome={home} />
 
-      {/*
-        On a narrow screen the rail sits below the fold, so the reading is
-        repeated here as a sticky strip. The model's current opinion is never
-        more than a glance away, at any width — there is no reveal to wait for.
-      */}
-      <div className="rule-b sticky top-0 z-10 bg-paper lg:hidden">
-        <div className="mx-auto max-w-[1180px] px-6 py-3 sm:px-10">
-          <RiskMeter
-            compact
-            probability={probability}
-            band={band}
-            sequence={step.n_answered}
-            settled={settled}
-          />
+      {/* On a narrow screen the rail sits below the fold, so the reading is repeated
+          as a sticky strip: the model's current opinion is never out of view. */}
+      <div className="sticky top-16 z-30 border-b border-line bg-[color-mix(in_oklab,var(--bg)_90%,transparent)] backdrop-blur-md lg:hidden">
+        <div className="mx-auto max-w-[1200px] px-4 py-3 sm:px-8">
+          <RiskPanel compact probability={probability} band={band} bands={s.bands} early={early}
+                     typical={s.typical_probability} base={s.base_rate} settled={settled} delta={delta} />
         </div>
       </div>
 
-      <main className="mx-auto w-full max-w-[1180px] flex-1 px-6 sm:px-10">
-        <div className="grid gap-x-14 gap-y-10 py-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:py-12">
-          {/* The active task. */}
-          <div className="min-w-0 lg:col-start-1 lg:row-start-1">
-            {result ? (
-              <ResultPanel result={result} onRestart={restart} />
-            ) : step.question ? (
-              <QuestionCard
-                key={step.question.feature}
-                question={step.question}
-                index={step.n_answered + 1}
-                suggested={scripted?.[step.question.feature]}
-                busy={busy}
-                alert={alert}
-                onAnswer={answer}
-              />
-            ) : (
-              <p className="text-[13px] text-ink-muted">Working…</p>
-            )}
+      <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 pb-16 pt-6 sm:px-8 sm:pt-8">
+        <ClaimStrip step={s} demo={demo} onRestart={home} />
 
-            <AnswerLedger answered={step.answered} effects={effects} />
-
-            {error && (
-              <p className="mt-8 border-l-2 border-risk-high pl-4 text-[13px] text-ink-soft">
-                {error}
-              </p>
-            )}
+        {result ? (
+          <div className="mt-6 space-y-4">
+            {errorBanner}
+            <ResultView
+              result={result}
+              questions={questions}
+              busy={busy}
+              onEdit={(f, v) => submit(f, v, true)}
+              onRestart={home}
+            />
           </div>
-
-          {/* Instrument rail. Second in source order, so on a narrow screen the
-              question comes first and the supporting detail follows it; pinned to
-              the right column above lg. The reading itself is not down here on
-              mobile — it is in the sticky strip above, always in view. */}
-          <aside className="lg:sticky lg:top-10 lg:col-start-2 lg:row-start-1 lg:self-start">
-            <div className="hidden border border-rule bg-surface p-6 lg:block">
-              <RiskMeter
-                probability={probability}
-                band={band}
-                sequence={step.n_answered}
-                settled={settled}
-              />
-            </div>
-
-            <div className="border border-rule bg-surface p-6 lg:mt-5">
-              <ProgressTrack step={step} settled={settled} />
-            </div>
-
-            {result && result.flagged_fields.length > 0 && (
-              <div className="mt-5 border border-rule bg-surface p-6">
-                <FlaggedFields fields={result.flagged_fields} />
+        ) : (
+          <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="min-w-0 space-y-6">
+              {errorBanner}
+              <div className="card p-6 sm:p-9">
+                {s.question ? (
+                  <QuestionCard
+                    key={`${s.question.feature}-${s.n_answered}`}
+                    question={s.question}
+                    index={s.n_answered + 1}
+                    suggested={script?.[s.question.feature]}
+                    busy={busy}
+                    change={s.last_change}
+                    autoplay={script ? autoplay : null}
+                    onToggleAutoplay={() => setAutoplay((a) => !a)}
+                    onAnswer={(v) => submit(s.question!.feature, v, false)}
+                  />
+                ) : (
+                  <div className="flex items-center gap-3 py-10 text-[14px] text-ink-2" role="status">
+                    <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-brand" />
+                    Preparing the verdict…
+                  </div>
+                )}
               </div>
-            )}
-          </aside>
-        </div>
-      </main>
+              <div className="card p-6">
+                <Ledger
+                  claim={s.claim}
+                  answered={s.answered}
+                  questions={questions}
+                  busy={busy || autoplay}
+                  onEdit={(f, v) => submit(f, v, true)}
+                />
+              </div>
+            </div>
 
+            <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
+              <div className="card hidden p-6 lg:block">
+                <RiskPanel probability={probability} band={band} bands={s.bands} early={early}
+                           typical={s.typical_probability} base={s.base_rate} settled={settled} delta={delta} />
+              </div>
+              <div className="card p-6">
+                <Trajectory points={history} bands={s.bands} />
+              </div>
+              <div className="card p-6">
+                <Progress step={s} settled={settled} />
+              </div>
+              <div className="card p-6">
+                <span className="eyebrow">Insurer rules</span>
+                <div className="mt-3"><Checks checks={s.checks} /></div>
+              </div>
+            </aside>
+          </div>
+        )}
+      </main>
       <Footer />
     </div>
   );
@@ -214,11 +354,13 @@ export default function Page() {
 
 function Footer() {
   return (
-    <footer className="rule-t mt-12">
-      <div className="mx-auto max-w-[1180px] px-6 py-6 text-[11.5px] leading-relaxed text-ink-muted sm:px-10">
-        A second check for clinic staff, not a replacement for their judgement. Risk and
-        reason code come from gradient-boosted trees; the plain-language reading is written
-        by Qwen from those figures and cannot alter them.
+    <footer className="no-print border-t border-line">
+      <div className="mx-auto flex max-w-[1200px] flex-col gap-2 px-4 py-6 text-[12px] leading-relaxed text-ink-3 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+        <span>
+          A second check for clinic staff, not a replacement for their judgement. Synthetic
+          data; real X12 reason codes.
+        </span>
+        <span>Bano Qabil AI hackathon · Mirza Ahsan Baig &amp; Safee Akmal</span>
       </div>
     </footer>
   );
