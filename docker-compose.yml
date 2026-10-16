@@ -8,8 +8,9 @@ services:
   api:
     build: .
     environment:
-      DASHSCOPE_API_KEY:      ${DASHSCOPE_API_KEY:?set DASHSCOPE_API_KEY in .env}
-      DASHSCOPE_BASE_URL:     ${DASHSCOPE_BASE_URL:?set DASHSCOPE_BASE_URL in .env}
+      # Optional: without a key the plain-English line comes from the built-in template.
+      DASHSCOPE_API_KEY:      ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_BASE_URL:     ${DASHSCOPE_BASE_URL:-https://dashscope-intl.aliyuncs.com/compatible-mode/v1}
       DASHSCOPE_WORKSPACE_ID: ${DASHSCOPE_WORKSPACE_ID:-}
       QWEN_MODEL:             ${QWEN_MODEL:-qwen-plus}
       # The web proxy forwards the visitor's address; per-client rate limits key on it.
