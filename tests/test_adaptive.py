@@ -149,3 +149,26 @@ def test_band_simulation_matches_the_live_loop(engine, claims):
         assert (simulated.n_answered, simulated.band, simulated.reason) == \
                (step.n_answered, step.risk_band, step.stop_reason)
         assert list(simulated.order) == order
+
+
+# --- reasons are facts, and the labeller and the API agree on them -----------
+
+def test_defect_rules_match_the_labeller_on_every_claim(engine, claims):
+    """The API names a reason only from `defect_codes`; the labeller assigns codes from
+    its own conditions. If the two ever disagreed, the tool could cite a reason the data
+    never contained, or miss one it did."""
+    import ml.label_carc as labeller
+    from ml.features import ASKABLE_FEATURES as ASK, defect_codes
+
+    raw = claims[ASK + list(CONTEXT_FEATURES)].copy()
+    derived = derive_frame(raw, engine.p.ref)
+    conditions = labeller.build_conditions(derived.copy())
+    male = (derived.patient_gender == "M").to_numpy()
+    for i, row in enumerate(derived.to_dict("records")):
+        expected = []
+        for code, column, _ in labeller.RULES:
+            if conditions[column].iloc[i]:
+                code = "7" if code == "6" and male[i] else code
+                if code not in expected:
+                    expected.append(code)
+        assert defect_codes(row) == expected, f"claim {i}: {defect_codes(row)} vs {expected}"

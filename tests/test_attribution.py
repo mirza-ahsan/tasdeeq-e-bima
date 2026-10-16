@@ -12,7 +12,7 @@ import pytest
 
 from backend.demo_claims import RISKY_CLAIM
 from backend.predictor import Predictor
-from ml.features import BILL_FEATURES, CONTEXT_FEATURES, PATIENT_FEATURES
+from ml.features import BILL_FEATURES, PATIENT_FEATURES
 from tests.helpers import CLAIMS, python_value, run_loop
 
 
@@ -42,18 +42,41 @@ def test_points_add_up_to_the_change_in_estimate(predictor):
             (a.probability - a.base_probability) * 100, abs=1e-6)
 
 
-def test_points_stay_on_the_probability_scale(predictor):
-    for answers, players in verdict_states(predictor):
-        points = predictor.attribute(answers, players).points
-        assert set(points) == set(players), "only fields the user supplied get points"
-        assert all(abs(p) <= 100 for p in points.values())
+def test_only_supplied_fields_get_points(predictor):
+    for answers, players in verdict_states(predictor, n=10):
+        assert set(predictor.attribute(answers, players).points) == set(players)
 
 
-def test_a_field_that_cannot_matter_gets_nothing(predictor):
-    """Shapley's null-player property: a duplicate copy of the context is worth zero."""
-    answers = {f: RISKY_CLAIM[f] for f in CONTEXT_FEATURES}
-    a = predictor.attribute({**answers, "unused": 1}, [*BILL_FEATURES, "unused"])
-    assert a.points["unused"] == pytest.approx(0.0, abs=1e-9)
+def test_exact_attribution_matches_brute_force_shapley(predictor):
+    """Average each field's marginal contribution over every ordering of the fields —
+    the definition of a Shapley value — and compare."""
+    from itertools import permutations
+
+    answers = dict(RISKY_CLAIM)
+    players = [*BILL_FEATURES, "pre_auth_obtained", "documents_complete"]
+    fixed = {k: v for k, v in answers.items() if k not in players}
+    totals = {f: 0.0 for f in players}
+    orders = list(permutations(players))
+    for order in orders:
+        state = dict(fixed)
+        before = predictor.predict(state)
+        for f in order:
+            state[f] = answers[f]
+            after = predictor.predict(state)
+            totals[f] += (after - before) * 100 / len(orders)
+            before = after
+    points = predictor.attribute(answers, players).points
+    for f in players:
+        assert points[f] == pytest.approx(totals[f], abs=1e-9)
+
+
+def test_a_field_listed_twice_is_counted_once(predictor):
+    answers = dict(RISKY_CLAIM)
+    once = predictor.attribute(answers, [*BILL_FEATURES, "pre_auth_obtained"])
+    twice = predictor.attribute(answers, [*BILL_FEATURES, "pre_auth_obtained", "pre_auth_obtained"])
+    assert twice.points == once.points
+    assert sum(twice.points.values()) == pytest.approx(
+        (twice.probability - twice.base_probability) * 100, abs=1e-9)
 
 
 def test_sampled_attribution_agrees_with_exact(predictor, monkeypatch):
