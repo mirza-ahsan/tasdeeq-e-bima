@@ -61,9 +61,11 @@ class ClaimPrediction:
 
     rejection_probability: float  # 0.0 - 1.0, computed and calibrated by the model
     risk_band: Literal["low", "medium", "high"]
-    carc_code: str | None  # real X12 code, e.g. "197"; None when no reason is shown
+    carc_code: str | None  # real X12 code, e.g. "197"; None when no defect was found
     carc_reason: str | None  # our plain-English reading of that code
     staff_action: str | None  # what to do about it
+    # Only defects actually present in the claim reach here. For a low-risk claim the
+    # reason is not "why it will be rejected" but something to fix before submitting.
     flagged_fields: list[FlaggedField] = field(default_factory=list)
     issues: list[str] = field(default_factory=list)  # failed rule checks, already worded
 
@@ -71,14 +73,20 @@ class ClaimPrediction:
     def percent(self) -> int:
         return round(self.rejection_probability * 100)
 
+    @property
+    def fix_first(self) -> bool:
+        return self.risk_band == "low" and bool(self.carc_reason)
+
     def to_payload(self) -> dict:
+        # The code number itself is left out: a clerk needs the reason, not "CARC 197",
+        # and a number Qwen never sees is a number it cannot misquote.
+        reason = ({"reason": self.carc_reason, "staff_action": self.staff_action}
+                  if self.carc_reason else None)
         return {
             "rejection_probability_percent": self.percent,
             "risk_band": self.risk_band,
-            "likely_rejection_reason": (
-                {"carc_code": self.carc_code, "reason": self.carc_reason,
-                 "staff_action": self.staff_action}
-                if self.carc_code else None),
+            "likely_rejection_reason": None if self.fix_first else reason,
+            "fix_before_submitting": reason if self.fix_first else None,
             "rule_check_issues": self.issues,
             "flagged_fields": [
                 {**asdict(f), "contribution_points": round(f.contribution_points, 1)}
@@ -109,30 +117,39 @@ Rules you must never break:
 percent sign (for example "62%"). Never recalculate, round differently, or describe it \
 as a fraction or in words.
 2. Never use any other number unless it appears, digit for digit, in the JSON.
-3. Never invent a rejection reason or a CARC code. Refer only to likely_rejection_reason \
-and rule_check_issues. Do not mention CARC codes by number.
-4. Never mention any claim field that is not present in flagged_fields or rule_check_issues.
+3. Never invent a problem or a reason. Refer only to likely_rejection_reason, \
+fix_before_submitting and rule_check_issues. Never mention reason codes.
+4. Never mention any claim field that is not present in the JSON.
 5. Never give medical advice and never comment on whether the treatment was appropriate.
 6. Never tell staff to fix something that is already correct. A field whose effect is \
 "reduces_risk" is working in the claim's favour — it is not a problem to solve.
 
 Write exactly two sentences, at most 45 words in total.
 
-If risk_band is "high" or "medium" and there is a likely_rejection_reason or a \
-rule_check_issue or a flagged field with effect "increases_risk":
-- Sentence 1: state the rejection risk and the single main reason for it.
-- Sentence 2: give the one concrete action staff should take before submitting, \
-taken from staff_action when it is present.
+If risk_band is "high" or "medium" and there is a likely_rejection_reason:
+- Sentence 1: state the rejection risk and that reason.
+- Sentence 2: give its staff_action as the one thing to do before submitting.
+
+If risk_band is "high" or "medium", there is no likely_rejection_reason, and a flagged \
+field has effect "increases_risk":
+- Sentence 1: state the risk and name that field as what drives it.
+- Sentence 2: say to confirm that detail before submitting.
 
 If risk_band is "medium" and nothing increases the risk:
 - Sentence 1: state the risk and that nothing stands out as a problem.
 - Sentence 2: say a quick review before submitting is still worthwhile, because not \
 every common rejection reason has been ruled out.
 
-If risk_band is "low":
-- Sentence 1: say the rejection risk is low, give the percentage, and name the \
-strongest field supporting that if there is one.
+If risk_band is "low" and there is a fix_before_submitting:
+- Sentence 1: begin "The rejection risk is low at N%, but" and name the problem.
+- Sentence 2: give its staff_action. Do not say the claim is ready to submit.
+
+If risk_band is "low" and there is no fix_before_submitting:
+- Sentence 1: begin "The rejection risk is low at N%" and name the strongest field \
+supporting that if there is one.
 - Sentence 2: say the claim looks ready to submit. Do not invent a task.
+
+Never call a "low" claim high risk or a "high" claim low risk.
 
 Plain English. No jargon, no markdown, no bullet points, no preamble, no greeting."""
 
@@ -182,8 +199,32 @@ _NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
 # Spelled-out quantities would slip past a digit check ("two-thirds", "sixty percent").
 _NUMBER_WORDS = re.compile(
     r"\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|"
-    r"forty|fifty|sixty|seventy|eighty|ninety|hundred|half|halves|thirds?|quarters?|"
-    r"percent|per cent)\b", re.IGNORECASE)
+    r"forty|fifty|sixty|seventy|eighty|ninety|hundred|half|halves|thirds?(?!-party)|"
+    r"quarters?|percent|per cent)\b", re.IGNORECASE)
+_BULLET = re.compile(r"^\s*([-*•]|\d+[.)])\s", re.MULTILINE)
+_SENTENCE_END = re.compile(r"[.!?](?=\s|$)")
+
+# What a reply may talk about. If it raises a topic, the payload must contain it: this is
+# what catches an invented reason ("the documents are missing") on a claim whose
+# documents were never mentioned.
+_TOPICS = {
+    "documents": ("document", "paperwork", "itemised", "discharge"),
+    "pre-authorisation": ("pre-auth", "preauth", "authoris", "authoriz", "approval"),
+    "deadline": ("deadline", "filing window", "filed late", "time limit"),
+    "panel": ("panel", "network"),
+    "duplicate": ("duplicate", "already submitted", "resubmi"),
+    "policy": ("policy", "lapsed", "terminated"),
+    "diagnosis": ("diagnos",),
+    "coverage": ("plan tier", "not covered", "exclude", "medically necessary", "medical necessity"),
+    "amount": ("amount", "charge", "tariff", "fee schedule", "overbill"),
+    "frequency": ("frequency", "too many claims", "repeat visit"),
+    "patient": ("age group", "patient's sex", "patient's gender", "male", "female"),
+}
+_FORBIDDEN_BY_BAND = {
+    "low": (r"\bhigh\b", r"likely to be rejected", r"\bmoderate\b"),
+    "medium": (r"\blow risk\b", r"\bhigh risk\b", r"ready to submit"),
+    "high": (r"\blow\b", r"ready to submit"),
+}
 
 
 def _numbers_in(text: str) -> set[str]:
@@ -191,20 +232,39 @@ def _numbers_in(text: str) -> set[str]:
 
 
 def validate(text: str, prediction: ClaimPrediction) -> str | None:
-    """Why `text` may not be shown, or None if it keeps every rule we can check."""
-    payload = json.dumps(prediction.to_payload(), ensure_ascii=False)
-    allowed = _numbers_in(payload) | {str(prediction.percent)}
-    stray = _numbers_in(text) - allowed
+    """Why `text` may not be shown, or None if it keeps every rule we can check.
+
+    Run on the reply as received, before whitespace is collapsed, so layout is visible.
+    """
+    if _BULLET.search(text) or "*" in text or "#" in text:
+        return "contains formatting"
+    flat = " ".join(text.split())
+    low = flat.lower()
+    payload = json.dumps(prediction.to_payload(), ensure_ascii=False).lower()
+
+    stray = _numbers_in(flat) - _numbers_in(payload) - {str(prediction.percent)}
     if stray:
         return f"states numbers not in the result: {sorted(stray)}"
-    if f"{prediction.percent}%" not in text.replace(" %", "%"):
+    if f"{prediction.percent}%" not in flat.replace(" %", "%"):
         return "does not state the computed risk"
-    if _NUMBER_WORDS.search(text):
+    if _NUMBER_WORDS.search(flat):
         return "describes a quantity in words"
-    if len(text.split()) > MAX_WORDS:
+    if "carc" in low:
+        return "mentions a reason code"
+    for pattern in _FORBIDDEN_BY_BAND[prediction.risk_band]:
+        if re.search(pattern, low):
+            return f"contradicts the {prediction.risk_band} band"
+    if prediction.risk_band == "low" and not re.search(r"\blow\b", low):
+        return "does not say the risk is low"
+    if (prediction.fix_first or prediction.issues) and "ready to submit" in low:
+        return "calls a claim with a known problem ready to submit"
+    for topic, words in _TOPICS.items():
+        if any(w in low for w in words) and not any(w in payload for w in words):
+            return f"raises {topic}, which is not in the result"
+    if len(_SENTENCE_END.findall(flat)) > 2:
+        return "more than two sentences"
+    if len(flat.split()) > MAX_WORDS:
         return "too long"
-    if "*" in text or "#" in text or "\n-" in text:
-        return "contains formatting"
     return None
 
 
@@ -224,17 +284,20 @@ def fallback_text(prediction: ClaimPrediction) -> str:
     drivers = [f for f in prediction.flagged_fields if f.effect == "increases_risk"]
     helpers = [f for f in prediction.flagged_fields if f.effect == "reduces_risk"]
 
+    reason = prediction.carc_reason.rstrip(".") if prediction.carc_reason else None
+    reason = reason[0].lower() + reason[1:] if reason else None
+    action = _sentence(prediction.staff_action or "Resolve this before submitting.")
+
     if prediction.risk_band == "low":
+        if reason:
+            return f"The rejection risk is low at {pct}%, but {reason}. {action}"
         support = f", helped most by {helpers[0].label.lower()} ({helpers[0].value})" if helpers else ""
         return f"The rejection risk is low at {pct}%{support}. The claim looks ready to submit."
 
-    if prediction.carc_reason:
-        reason = prediction.carc_reason.rstrip(".")
-        reason = reason[0].lower() + reason[1:]
-        action = prediction.staff_action or "Resolve this before submitting."
-        return f"This claim has a {pct}% chance of rejection, most likely because {reason}. {_sentence(action)}"
+    if reason:
+        return f"This claim has a {pct}% chance of rejection, most likely because {reason}. {action}"
 
-    if prediction.issues:
+    if prediction.issues:   # every rule issue maps to a reason today; this is a safety net
         issue = prediction.issues[0].rstrip(".")
         return (f"This claim has a {pct}% chance of rejection. The main concern: "
                 f"{issue[0].lower() + issue[1:]}; resolve it before submitting.")
@@ -274,8 +337,9 @@ def explain(
             temperature=0.2,
             max_tokens=160,
         )
-        text = " ".join((response.choices[0].message.content or "").split())
-        problem = validate(text, prediction) if text else "empty reply"
+        raw = (response.choices[0].message.content or "").strip()
+        problem = validate(raw, prediction) if raw else "empty reply"
+        text = " ".join(raw.split())
         if problem:
             logger.warning("Qwen reply rejected (%s); using template fallback.", problem)
             return Explanation(text=fallback_text(prediction), source="fallback")
