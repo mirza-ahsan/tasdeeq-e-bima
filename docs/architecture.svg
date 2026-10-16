@@ -1,119 +1,160 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 640" width="1040" height="640"
-     font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 720" width="1120" height="720"
+     font-family="Geist, 'Inter', 'Helvetica Neue', Arial, sans-serif">
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="#7d7767"/>
+      <path d="M0 0 L10 5 L0 10 z" class="ah"/>
     </marker>
-    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="#1f4b43"/>
+    <marker id="ak" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" class="ahk"/>
     </marker>
     <style>
-      .box   { fill:#ffffff; stroke:#cdc7b6; stroke-width:1.2; }
-      .boxk  { fill:#e7efec; stroke:#1f4b43; stroke-width:1.4; }
-      .boxd  { fill:#f3f1ea; stroke:#cdc7b6; stroke-width:1.2; stroke-dasharray:4 3; }
-      .t     { font-size:13.5px; fill:#17150f; }
-      .s     { font-size:11px; fill:#7d7767; }
-      .m     { font-size:11px; fill:#4a463b; font-family:'IBM Plex Mono',monospace; }
-      .lane  { font-size:10.5px; fill:#7d7767; letter-spacing:1.6px; font-family:'IBM Plex Mono',monospace; }
-      .ln    { stroke:#7d7767; stroke-width:1.2; fill:none; marker-end:url(#a); }
-      .lnk   { stroke:#1f4b43; stroke-width:1.4; fill:none; marker-end:url(#a2); }
-      .lnb   { stroke:#7d7767; stroke-width:1.2; fill:none; marker-end:url(#a); marker-start:url(#a); }
-      .rule  { stroke:#e2ded2; stroke-width:1; }
+      .bg    { fill:#f6f6f3; }
+      .box   { fill:#ffffff; stroke:#d6d9d2; stroke-width:1.2; }
+      .boxk  { fill:#e3f0eb; stroke:#0b5d4b; stroke-width:1.4; }
+      .boxc  { fill:#ffffff; stroke:#0b5d4b; stroke-width:1.4; stroke-dasharray:5 4; }
+      .boxq  { fill:#eef3fb; stroke:#2a78d6; stroke-width:1.2; }
+      .t     { font-size:14px; fill:#0e1412; font-weight:600; }
+      .s     { font-size:11.5px; fill:#5f6a66; }
+      .m     { font-size:12px; fill:#0e1412; font-family:'Geist Mono', ui-monospace, monospace; font-weight:500; }
+      .mk    { font-size:12px; fill:#0b5d4b; font-family:'Geist Mono', ui-monospace, monospace; font-weight:600; }
+      .lane  { font-size:11px; fill:#5f6a66; letter-spacing:1.5px; font-weight:600; }
+      .note  { font-size:11px; fill:#5f6a66; font-style:italic; }
+      .stat  { font-size:12px; fill:#0b5d4b; font-weight:600; }
+      .ln    { stroke:#8b958f; stroke-width:1.3; fill:none; marker-end:url(#a); }
+      .lnk   { stroke:#0b5d4b; stroke-width:1.5; fill:none; marker-end:url(#ak); }
+      .lnd   { stroke:#0b5d4b; stroke-width:1.2; fill:none; stroke-dasharray:4 4; marker-end:url(#ak); }
+      .rule  { stroke:#e1e3dd; stroke-width:1; }
+      .bus   { stroke:#8b958f; stroke-width:1.3; fill:none; }
+      .ah    { fill:#8b958f; }
+      .ahk   { fill:#0b5d4b; }
+      .title { font-size:19px; fill:#0e1412; font-weight:600; }
+      @media (prefers-color-scheme: dark) {
+        .bg   { fill:#0b0f0e; }
+        .box  { fill:#121816; stroke:#2b3633; }
+        .boxk { fill:#10261f; stroke:#34c79a; }
+        .boxc { fill:#121816; stroke:#34c79a; }
+        .boxq { fill:#121b26; stroke:#3987e5; }
+        .t, .m, .title { fill:#ecf1ef; }
+        .s, .lane, .note { fill:#8b9893; }
+        .mk, .stat { fill:#34c79a; }
+        .ln   { stroke:#5d6a66; } .ah { fill:#5d6a66; }
+        .lnk, .lnd { stroke:#34c79a; } .ahk { fill:#34c79a; }
+        .rule { stroke:#1f2826; }
+        .bus  { stroke:#5d6a66; }
+      }
     </style>
   </defs>
-  <rect width="1040" height="640" fill="#faf9f6"/>
+  <rect width="1120" height="720" class="bg"/>
 
-  <text x="40" y="34" class="t" font-size="17" font-family="Newsreader, Georgia, serif">
-    Claim Rejection Risk Predictor — architecture
-  </text>
+  <text x="40" y="42" class="title">Claim Check — architecture</text>
+  <text x="40" y="62" class="s">Everything the clerk sees is computed by the models and the rule tables; Qwen only words it.</text>
 
-  <!-- ============ OFFLINE ============ -->
-  <text x="40" y="72" class="lane">OFFLINE · BUILD TIME</text>
-  <line x1="40" y1="82" x2="1000" y2="82" class="rule"/>
+  <!-- ===================== OFFLINE ===================== -->
+  <text x="40" y="104" class="lane">OFFLINE · ONCE, ARTEFACTS COMMITTED</text>
+  <line x1="40" y1="114" x2="1080" y2="114" class="rule"/>
 
-  <rect x="40"  y="100" width="150" height="56" rx="2" class="box"/>
-  <text x="115" y="123" class="t" text-anchor="middle">Synthea</text>
-  <text x="115" y="140" class="s" text-anchor="middle">108 patients · SNOMED</text>
+  <rect x="40" y="186" width="150" height="62" rx="10" class="box"/>
+  <text x="115" y="211" class="t" text-anchor="middle">Synthea</text>
+  <text x="115" y="229" class="s" text-anchor="middle">pinned by SHA-256</text>
 
-  <rect x="240" y="100" width="160" height="56" rx="2" class="box"/>
-  <text x="320" y="123" class="m" text-anchor="middle">build_dataset.py</text>
-  <text x="320" y="140" class="s" text-anchor="middle">join · PKR · categorise</text>
+  <rect x="40" y="268" width="150" height="50" rx="10" class="box"/>
+  <text x="115" y="290" class="t" text-anchor="middle">X12 CARC</text>
+  <text x="115" y="307" class="s" text-anchor="middle">12 real codes</text>
 
-  <rect x="450" y="100" width="160" height="56" rx="2" class="box"/>
-  <text x="530" y="123" class="m" text-anchor="middle">label_carc.py</text>
-  <text x="530" y="140" class="s" text-anchor="middle">probabilistic rules</text>
+  <rect x="226" y="186" width="160" height="62" rx="10" class="box"/>
+  <text x="306" y="210" class="m" text-anchor="middle">build_dataset.py</text>
+  <text x="306" y="228" class="s" text-anchor="middle">deterministic · PKR tariff</text>
 
-  <rect x="660" y="100" width="140" height="56" rx="2" class="box"/>
-  <text x="730" y="123" class="m" text-anchor="middle">train.py</text>
-  <text x="730" y="140" class="s" text-anchor="middle">+ masking</text>
+  <rect x="422" y="186" width="160" height="62" rx="10" class="box"/>
+  <text x="502" y="210" class="m" text-anchor="middle">label_carc.py</text>
+  <text x="502" y="228" class="s" text-anchor="middle">probabilistic CARC rules</text>
 
-  <rect x="850" y="92" width="150" height="72" rx="2" class="boxk"/>
-  <text x="925" y="114" class="m" text-anchor="middle" fill="#1f4b43">models/</text>
-  <text x="925" y="131" class="s" text-anchor="middle">risk · CARC</text>
-  <text x="925" y="147" class="s" text-anchor="middle">calibrator · metadata</text>
+  <rect x="618" y="186" width="160" height="62" rx="10" class="box"/>
+  <text x="698" y="210" class="m" text-anchor="middle">train.py</text>
+  <text x="698" y="228" class="s" text-anchor="middle">grouped CV · masking</text>
 
-  <rect x="450" y="186" width="160" height="44" rx="2" class="box"/>
-  <text x="530" y="204" class="t" text-anchor="middle">X12 CARC codes</text>
-  <text x="530" y="220" class="s" text-anchor="middle">12 real reason codes</text>
+  <rect x="814" y="186" width="120" height="62" rx="10" class="box"/>
+  <text x="874" y="210" class="m" text-anchor="middle">simulate.py</text>
+  <text x="874" y="228" class="s" text-anchor="middle">bands on the loop</text>
 
-  <line x1="190" y1="128" x2="234" y2="128" class="ln"/>
-  <line x1="400" y1="128" x2="444" y2="128" class="ln"/>
-  <line x1="610" y1="128" x2="654" y2="128" class="ln"/>
-  <line x1="800" y1="128" x2="844" y2="128" class="lnk"/>
-  <line x1="530" y1="186" x2="530" y2="162" class="ln"/>
+  <rect x="960" y="178" width="120" height="78" rx="10" class="boxk"/>
+  <text x="1020" y="202" class="mk" text-anchor="middle">models/</text>
+  <text x="1020" y="220" class="s" text-anchor="middle">risk · CARC</text>
+  <text x="1020" y="236" class="s" text-anchor="middle">calibrator · bands</text>
 
-  <text x="40" y="200" class="s">3,612 claims</text>
-  <text x="40" y="216" class="s">26.5% rejected</text>
-  <text x="40" y="232" class="s">AUC 0.788</text>
+  <path d="M190 217 H222" class="ln"/>
+  <path d="M386 217 H418" class="ln"/>
+  <path d="M582 217 H614" class="ln"/>
+  <path d="M778 217 H810" class="ln"/>
+  <path d="M934 217 H956" class="lnk"/>
+  <path d="M190 293 H502 V252" class="ln"/>
 
-  <!-- ============ RUNTIME ============ -->
-  <text x="40" y="296" class="lane">RUNTIME · PER CLAIM</text>
-  <line x1="40" y1="306" x2="1000" y2="306" class="rule"/>
+  <!-- the shared contract -->
+  <rect x="400" y="128" width="400" height="40" rx="10" class="boxc"/>
+  <text x="600" y="153" class="mk" text-anchor="middle">ml/features.py · the one feature contract</text>
+  <path d="M502 168 V182" class="lnd"/>
+  <path d="M698 168 V182" class="lnd"/>
 
-  <rect x="40" y="392" width="160" height="70" rx="2" class="box"/>
-  <text x="120" y="418" class="t" text-anchor="middle">Next.js UI</text>
-  <text x="120" y="435" class="s" text-anchor="middle">one question</text>
-  <text x="120" y="450" class="s" text-anchor="middle">at a time</text>
+  <text x="226" y="336" class="stat">3,612 claims · 23.7% rejected · test AUC 0.849</text>
+  <text x="618" y="276" class="note">test split used once, for the report</text>
 
-  <rect x="250" y="392" width="150" height="70" rx="2" class="box"/>
-  <text x="325" y="418" class="m" text-anchor="middle">FastAPI</text>
-  <text x="325" y="435" class="s" text-anchor="middle">session state</text>
-  <text x="325" y="450" class="s" text-anchor="middle">in memory</text>
+  <!-- ===================== RUNTIME ===================== -->
+  <text x="40" y="364" class="lane">RUNTIME · PER CLAIM</text>
+  <line x1="40" y1="374" x2="1080" y2="374" class="rule"/>
 
-  <rect x="455" y="330" width="185" height="60" rx="2" class="boxk"/>
-  <text x="547" y="353" class="m" text-anchor="middle" fill="#1f4b43">adaptive.py</text>
-  <text x="547" y="370" class="s" text-anchor="middle">mutual information</text>
+  <rect x="40" y="420" width="150" height="72" rx="10" class="box"/>
+  <text x="115" y="446" class="t" text-anchor="middle">Browser</text>
+  <text x="115" y="464" class="s" text-anchor="middle">bill, then 3–8</text>
+  <text x="115" y="480" class="s" text-anchor="middle">questions</text>
 
-  <rect x="455" y="410" width="185" height="60" rx="2" class="box"/>
-  <text x="547" y="433" class="m" text-anchor="middle">predictor.py</text>
-  <text x="547" y="450" class="s" text-anchor="middle">LightGBM + SHAP</text>
+  <rect x="226" y="420" width="160" height="72" rx="10" class="box"/>
+  <text x="306" y="446" class="t" text-anchor="middle">Next.js</text>
+  <text x="306" y="464" class="s" text-anchor="middle">page + /api proxy</text>
+  <text x="306" y="480" class="s" text-anchor="middle">CSP · one origin</text>
 
-  <rect x="455" y="500" width="185" height="60" rx="2" class="box"/>
-  <text x="547" y="523" class="m" text-anchor="middle">explain_qwen.py</text>
-  <text x="547" y="540" class="s" text-anchor="middle">strict prompt</text>
+  <rect x="422" y="420" width="160" height="72" rx="10" class="box"/>
+  <text x="502" y="446" class="t" text-anchor="middle">FastAPI</text>
+  <text x="502" y="464" class="s" text-anchor="middle">validation · sessions</text>
+  <text x="502" y="480" class="s" text-anchor="middle">rate limits · cache</text>
 
-  <rect x="700" y="500" width="200" height="60" rx="2" class="boxk"/>
-  <text x="800" y="523" class="t" text-anchor="middle" fill="#1f4b43">Qwen · DashScope</text>
-  <text x="800" y="540" class="s" text-anchor="middle">OpenAI-compatible API</text>
+  <path d="M190 456 H222" class="ln"/>
+  <path d="M386 456 H418" class="ln"/>
 
-  <path d="M200 420 L244 420" class="lnb"/>
-  <path d="M400 412 L428 412 L428 360 L449 360" class="ln"/>
-  <path d="M400 442 L449 442" class="ln"/>
-  <path d="M400 452 L428 452 L428 530 L449 530" class="ln"/>
-  <path d="M547 390 L547 404" class="lnb"/>
-  <line x1="640" y1="530" x2="694" y2="530" class="lnk"/>
-  <path d="M640 430 L965 430 L965 176" class="ln" stroke-dasharray="4 3"/>
-  <text x="975" y="284" class="s" text-anchor="end">loaded once,</text>
-  <text x="975" y="299" class="s" text-anchor="end">at startup</text>
+  <rect x="650" y="396" width="200" height="56" rx="10" class="box"/>
+  <text x="750" y="419" class="m" text-anchor="middle">adaptive.py</text>
+  <text x="750" y="437" class="s" text-anchor="middle">information gain · pre-auth first</text>
 
-  <!-- annotations -->
-  <text x="700" y="352" class="s">asks whichever unanswered field</text>
-  <text x="700" y="368" class="s">would reduce uncertainty most</text>
-  <text x="700" y="452" class="s">probability · flagged fields · CARC</text>
-  <text x="700" y="468" class="s">calibrated, clamped 2–97%</text>
+  <rect x="650" y="468" width="200" height="56" rx="10" class="boxk"/>
+  <text x="750" y="491" class="mk" text-anchor="middle">predictor.py</text>
+  <text x="750" y="509" class="s" text-anchor="middle">calibrated LightGBM · Shapley</text>
 
-  <line x1="40" y1="596" x2="1000" y2="596" class="rule"/>
-  <text x="40" y="618" class="s">
-    Qwen receives only the computed result and restates it. It cannot change the probability, the reason code, or which fields were flagged.
-  </text>
+  <rect x="650" y="540" width="200" height="56" rx="10" class="box"/>
+  <text x="750" y="563" class="m" text-anchor="middle">checks.py</text>
+  <text x="750" y="581" class="s" text-anchor="middle">insurer rule checks</text>
+
+  <rect x="650" y="612" width="200" height="56" rx="10" class="box"/>
+  <text x="750" y="635" class="m" text-anchor="middle">explain_qwen.py</text>
+  <text x="750" y="653" class="s" text-anchor="middle">prompt · validator · fallback</text>
+
+  <rect x="900" y="612" width="180" height="56" rx="10" class="boxq"/>
+  <text x="990" y="635" class="t" text-anchor="middle">Qwen · DashScope</text>
+  <text x="990" y="653" class="s" text-anchor="middle">words the result only</text>
+
+  <path d="M582 456 H616" class="bus"/>
+  <path d="M616 424 V640" class="bus"/>
+  <path d="M616 424 H646" class="ln"/>
+  <path d="M616 496 H646" class="ln"/>
+  <path d="M616 568 H646" class="ln"/>
+  <path d="M616 640 H646" class="ln"/>
+  <path d="M850 640 H896" class="ln"/>
+  <path d="M750 452 V464" class="ln"/>
+
+  <!-- models loaded once -->
+  <path d="M1020 256 V496 H854" class="lnk"/>
+  <text x="1012" y="330" class="note" text-anchor="end">loaded once</text>
+
+  <text x="40" y="560" class="note">The model decides the probability, the</text>
+  <text x="40" y="576" class="note">fields to blame and the reason code. Qwen's</text>
+  <text x="40" y="592" class="note">reply is checked number by number and</text>
+  <text x="40" y="608" class="note">replaced by a template if it strays.</text>
 </svg>
