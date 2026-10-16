@@ -37,7 +37,8 @@ QUESTION_BUDGET = 4.5
 
 LOW_GRID = np.round(np.arange(0.08, 0.26, 0.01), 2)
 HIGH_GRID = np.round(np.arange(0.30, 0.71, 0.01), 2)
-GAIN_GRID = [0.001, 0.002, 0.003, 0.004, 0.006, 0.008, 0.012]
+# 0.0 means "never stop for low gain": only a settled band or the cap ends a check.
+GAIN_GRID = [0.0, 0.0005, 0.001, 0.002, 0.003, 0.004, 0.006, 0.008, 0.012]
 
 
 @dataclass
@@ -112,6 +113,7 @@ def summarise(verdicts: list[Verdict]) -> dict:
         "bands": bands,
         "rejections_flagged": round(float(np.mean([v.band != "low" for v in rejected])), 4),
         "rejections_in_high_band": round(float(np.mean([v.band == "high" for v in rejected])), 4),
+        "mean_questions": round(float(np.mean([v.n_answered for v in verdicts])), 2),
         "mean_questions_approved": round(float(np.mean([v.n_answered for v in approved])), 2),
         "mean_questions_rejected": round(float(np.mean([v.n_answered for v in rejected])), 2),
         "share_at_minimum": round(float(np.mean([v.n_answered == MIN_QUESTIONS

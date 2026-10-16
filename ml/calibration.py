@@ -19,9 +19,9 @@ consultation sat at 20.1% through four good answers, against a low band ending a
 
 Centred isotonic regression (Oron & Flournoy, 2017) keeps isotonic's fitted value for
 each block of tied predictions but places it at the block's centre and interpolates
-linearly between neighbouring blocks. The block means — and so the calibration — are
-unchanged; the steps between them become slopes, so every answer that moves the model
-moves the number on screen.
+linearly between neighbouring blocks. Calibration is approximately preserved (each block's
+value is still its observed rate, at its centre); the steps between blocks become slopes,
+so every answer that moves the model moves the number on screen.
 """
 
 from __future__ import annotations

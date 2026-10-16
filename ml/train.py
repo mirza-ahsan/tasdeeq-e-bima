@@ -12,9 +12,9 @@ computes them, so a masked copy is a state the live loop can actually reach.
 
 Each split has one job, and the test split is used for nothing but the final report:
 
-  * train (80%)       — fits the models; hyperparameters chosen by 5-fold grouped CV
-                        inside it (copies of one claim never straddle a fold), and the
-                        isotonic calibrator fitted on that CV's out-of-fold predictions
+  * train (80%)       — fits the models; hyperparameters chosen by 5-fold CV inside it
+                        (each claim's masked copies stay in one fold), and the
+                        calibrator fitted on that CV's out-of-fold predictions
   * validation (10%)  — the risk bands, chosen by simulating the real question loop
                         (ml/simulate.py)
   * test (10%)        — reported once, both as model metrics and as the verdicts users
@@ -131,7 +131,8 @@ def params_for(tree: dict, y: pd.Series) -> dict:
 
 def select_hyperparameters(df: pd.DataFrame, ref: dict, categories: dict
                            ) -> tuple[dict, list, np.ndarray, np.ndarray]:
-    """Grouped 5-fold CV on the training split. Each fold model is scored on the held-out
+    """5-fold CV on the training split, folds formed by claim so a claim's masked copies
+    never straddle one. Each fold model is scored on the held-out
     claims' full rows plus one fixed partial view, the mix the product depends on.
 
     Also returns the winning configuration's out-of-fold predictions. Isotonic
@@ -219,18 +220,25 @@ def value_priors(df: pd.DataFrame) -> dict:
     return priors
 
 
-def train_carc(df: pd.DataFrame, ref: dict, categories: dict, rng: np.random.Generator):
-    """Reason model, trained only on rejected claims whose rejection has a cause."""
-    rej = df[df[TARGET] & df[CARC_TARGET].notna()].copy()
-    classes = sorted(rej[CARC_TARGET].unique(), key=int)
-    cls_idx = {c: i for i, c in enumerate(classes)}
-    y = rej[CARC_TARGET].map(cls_idx).astype(int)
+def train_carc(df: pd.DataFrame, idx_tr: pd.Index, idx_val: pd.Index, idx_te: pd.Index,
+               ref: dict, categories: dict, rng: np.random.Generator):
+    """Reason model, trained only on rejected claims whose rejection has a cause.
 
-    tr, te = train_test_split(rej.index, test_size=0.2, stratify=y, random_state=SEED)
-    fit, stop = train_test_split(tr, test_size=0.15, stratify=y.loc[tr], random_state=SEED)
-    Xf, yf, _ = mask_augment(rej.loc[fit], y.loc[fit], rng, 3, ref)
-    Xs, ys = partial_view(rej.loc[stop], y.loc[stop], ref)
-    Xs = pd.concat([derive_frame(raw_columns(rej.loc[stop]), ref), Xs], ignore_index=True)
+    It uses the same split as the risk model: trained on the training split's coded
+    rejections, stopped early on the validation split's, scored on the test split's. No
+    test claim is ever in its training data.
+    """
+    coded = df[df[TARGET] & df[CARC_TARGET].notna()]
+    classes = sorted(coded[CARC_TARGET].unique(), key=int)
+    cls_idx = {c: i for i, c in enumerate(classes)}
+    y = coded[CARC_TARGET].map(cls_idx).astype(int)
+    tr = coded.index.intersection(idx_tr)
+    stop = coded.index.intersection(idx_val)
+    te = coded.index.intersection(idx_te)
+
+    Xf, yf, _ = mask_augment(coded.loc[tr], y.loc[tr], rng, 3, ref)
+    Xs, ys = partial_view(coded.loc[stop], y.loc[stop], ref)
+    Xs = pd.concat([derive_frame(raw_columns(coded.loc[stop]), ref), Xs], ignore_index=True)
     ys = pd.concat([y.loc[stop].reset_index(drop=True), ys], ignore_index=True)
 
     carc = lgb.train(
@@ -244,14 +252,13 @@ def train_carc(df: pd.DataFrame, ref: dict, categories: dict, rng: np.random.Gen
                                 categorical_feature=CATEGORICAL_FEATURES)],
         callbacks=[lgb.early_stopping(50, verbose=False)])
 
-    Xt = prepare(derive_frame(raw_columns(rej.loc[te]), ref), categories)
-    probs = carc.predict(Xt)
+    probs = carc.predict(prepare(derive_frame(raw_columns(coded.loc[te]), ref), categories))
     yt = y.loc[te].to_numpy()
     top1 = float(np.mean(probs.argmax(axis=1) == yt))
     top3 = float(np.mean([yt[i] in np.argsort(r)[-3:] for i, r in enumerate(probs)]))
     return carc, classes, {"carc_top1": round(top1, 4), "carc_top3": round(top3, 4),
                            "carc_test_claims": int(len(te)),
-                           "carc_training_claims": int(len(rej)),
+                           "carc_training_claims": int(len(tr)),
                            "carc_model_trees": int(carc.best_iteration)}
 
 
@@ -313,7 +320,7 @@ def main() -> int:
     print(f"split: train {len(idx_tr)} | val {len(idx_val)} | test {len(idx_te)}")
 
     # ---------------- risk model ----------------
-    print("\n  hyperparameters (5-fold grouped CV on train):")
+    print("\n  hyperparameters (5-fold CV on train, a claim's copies kept together):")
     best, cv_results, oof_raw, oof_y = select_hyperparameters(df.loc[idx_tr], ref, categories)
     tree = {k: best[k] for k in ("num_leaves", "min_data_in_leaf")}
     print(f"  selected: copies={best['masked_copies']} {tree} rounds={best['rounds']}")
@@ -330,7 +337,7 @@ def main() -> int:
     calibrator = build_calibrator().fit(oof_raw, oof_y)
 
     # ---------------- CARC reason model ----------------
-    carc, classes, carc_metrics = train_carc(df, ref, categories, rng)
+    carc, classes, carc_metrics = train_carc(df, idx_tr, idx_val, idx_te, ref, categories, rng)
     print(f"\n  CARC model ({len(classes)} classes, {carc_metrics['carc_training_claims']} "
           f"coded rejections): top-1 {carc_metrics['carc_top1']:.1%}  "
           f"top-3 {carc_metrics['carc_top3']:.1%}  (random {1 / len(classes):.1%})")
