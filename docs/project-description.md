@@ -20,60 +20,79 @@ insurance patients — which hurts the people insurance was meant to help.
 
 ## What we built
 
-A pre-submission check. Clinic staff answer a handful of questions about a claim and get
-three things back: how likely it is to be rejected, which specific field is causing that,
-and what to do before submitting.
+A pre-submission check. The clerk enters the bill — the patient's age and sex, the procedure
+and the amount — and answers the few paperwork questions that matter for that claim. They get
+back how likely it is to be rejected, which specific field is causing that, which insurer rules
+it trips, and what to do before submitting.
 
 It is a spell-checker for insurance claims.
 
-### Three parts
+### Four parts
 
-**A risk model.** Gradient-boosted trees (LightGBM) predict the probability of rejection.
-SHAP produces a per-claim attribution, so the tool points at the specific field driving the
-risk rather than returning a bare number. A second model predicts which real
-[X12 CARC code](https://x12.org/codes/claim-adjustment-reason-codes) — the industry-standard
-rejection reason vocabulary — is most likely to apply.
+**A risk model.** Gradient-boosted trees (LightGBM), calibrated so that a stated 40% means
+roughly four in ten, predict the probability of rejection on a claim that may still be half
+answered. Exact Shapley values attribute that probability to the bill and the answers: each
+field gets signed points, and the points add up from a typical claim to this one, so the tool
+points at the field driving the risk rather than returning a bare number. A second model
+predicts which real [X12 CARC code](https://x12.org/codes/claim-adjustment-reason-codes) — the
+industry-standard rejection reason vocabulary — is most likely to apply.
 
 We chose trees over a neural network deliberately. Published comparisons on claim-denial data
 find neural networks underperform tree methods on this kind of tabular problem, and trees
-give the per-claim attribution the explanation layer needs as a byproduct of training.
+handle a missing answer natively, which a question-by-question flow depends on.
 
-**An adaptive question flow.** Rather than a long form, the tool asks one question at a
-time. After every answer it computes, for each unanswered field, the mutual information
-between the rejection outcome and that field given everything known so far — then asks
-whichever would reduce uncertainty most. It stops when it is confident or when no remaining
-question would earn its keep.
+**An adaptive question flow.** Rather than a long form, the tool asks one question at a time.
+After every answer it computes, for each open question, the mutual information between the
+rejection outcome and that question's answer, given everything known so far — and asks
+whichever would reduce uncertainty most. It stops once the verdict is settled: never before
+three questions, never after eight.
 
 This is the part that is genuinely different. Insurance chatbots that do adaptive intake
-generally run a decision tree; this is information-theoretic. Across 200 held-out claims we
-observe **72 distinct question orders**. Clean claims finish in about three questions,
-problem claims take longer.
+generally run a decision tree; this is information-theoretic. Across 362 held-out claims it
+used **52 different question orders**, and the first question alone depends on the bill.
+Where a procedure needs pre-authorisation, that is always asked first: a one-step
+information-gain calculation cannot see that the procedure is what makes pre-authorisation
+matter, so the rule is structural rather than left to chance.
 
-**A plain-language layer, powered by Qwen.** The structured output — probability, flagged
-fields, reason code — goes to Qwen through Alibaba Cloud's DashScope OpenAI-compatible API,
-which returns two sentences a receptionist can act on.
+**Insurer rule checks.** A clerk who knows pre-authorisation was not obtained learns nothing
+from being told so. The value is in what they would otherwise look up: whether this procedure
+needed it at all, how much of this insurer's filing window has gone, whether the bill is far
+above the typical price, whether the plan tier covers it, whether the diagnosis justifies it,
+whether it fits the patient. Six such checks run on every claim, from the same rule tables the
+training data was labelled with.
 
-The constraint here is the important part. Qwen sees only the already-computed result, and
-its prompt forbids inventing a probability, a reason code, or a field. It restates; it does
-not decide. If the call fails, a deterministic template takes over, so the tool degrades
-rather than breaks. A test asserts that no percentage appears in Qwen's output other than
-the one the model computed.
+**A plain-language layer, powered by Qwen.** The structured result — probability, drivers,
+rule-check issues, reason code — goes to Qwen through Alibaba Cloud's DashScope
+OpenAI-compatible API, which returns two sentences a receptionist can act on.
+
+The constraint here is the important part. Qwen sees only the already-computed result, and its
+reply is checked before anyone sees it: every number in it must appear in the payload, the
+stated risk must be the computed one, and it must not describe quantities in words. A reply
+that fails is replaced by a deterministic template, as is any reply when the network fails, so
+the tool degrades rather than breaks. Calls are capped per minute and cached per claim.
 
 ## Results
 
+On a held-out test split of 362 claims, used once, for this report:
+
 | | |
 |---|---|
-| ROC AUC | **0.788** (0.733 with partial answers) |
-| Accuracy | 77.9% — against a 73.5% majority-class baseline |
-| Recall | 67.7% — catches two of every three claims that would be rejected |
-| CARC reason code | 68.2% top-1, 79.7% top-3, across 12 codes (random: 8.3%) |
-| Questions asked | 3.7 for approved claims, 4.1 for rejected |
+| ROC AUC | **0.849** fully answered (0.763 with questions still open) |
+| Cleared as low risk | 62% of claims — 89% of them were accepted |
+| Flagged high risk | 26% of claims — 56% of them were rejected (base rate 24%) |
+| Rejections flagged in advance | 72% |
+| Accuracy at the high-risk line | 81.8% — against a 76.2% "approve everything" baseline |
+| Questions per check | 3.4 for accepted claims, 3.6 for rejected |
+| CARC reason code | 88% top-1 across 12 codes (random: 8%) |
 
-Per-code accuracy is highest where the demo depends on it: **92% on CARC 197**
-(pre-authorisation absent), 87% on out-of-network, 80% on incomplete documents.
+The verdict thresholds were not chosen by hand. They were fitted on a separate validation split
+by simulating the real question loop, under written constraints: a "low" verdict must be right
+at least 85% of the time, "high" must mean more likely rejected than not, and both must sit on
+either side of the average claim's risk. Hyperparameters were chosen by cross-validation inside
+the training split.
 
-Read accuracy carefully. Only 26.5% of claims are rejected, so a model that blindly approved
-everything would already score 73.5%. AUC and recall are the meaningful numbers.
+Read accuracy carefully. Only 24% of claims are rejected, so a model that blindly approved
+everything would already score 76%. Verdict quality and AUC are the meaningful numbers.
 
 ## About the data — the part we want to be asked about
 
@@ -83,41 +102,55 @@ this space trains on its own private claims history. So we built our dataset, bu
 nothing:
 
 - **Synthea**, the open-source clinical simulator from MITRE, generates the patient records.
-  Diagnoses and procedures follow real care pathways and carry real SNOMED CT codes.
+  Diagnoses and procedures follow real care pathways and carry real SNOMED CT codes. The
+  bundle is pinned by checksum, and the dataset builds byte-for-byte from it.
 - **X12 CARC codes** supply the rejection vocabulary. All twelve codes we use were verified
   against the official published list.
 
-What is ours is the labelling: a probabilistic rules engine that maps believable claim
-defects to the matching real reason code, plus a Pakistani context layer (PKR amounts,
-fictional insurer names, plan tiers) and the paperwork fields Synthea does not model.
+What is ours is the labelling: a probabilistic rules engine that maps believable claim defects
+to the matching real reason code, with noise, plus a Pakistani context layer (prices anchored to
+typical clinic rates, invented insurer names, plan tiers, filing windows) and the paperwork
+fields Synthea does not model.
 
-We hold accuracy at 77.9% on purpose. On self-generated data a near-perfect score would only
-prove the model had reverse-engineered our own rules — which is not evidence it would work
-on real claims. `docs/data-provenance.md` states exactly where the line between real and
+We hold accuracy in the 70–85% band on purpose. On self-generated data a near-perfect score
+would only prove the model had reverse-engineered our own rules — which is not evidence it would
+work on real claims. `docs/data-provenance.md` states exactly where the line between real and
 simulated falls, and `docs/model-card.md` lists every limitation we know of.
+
+## Built to be checked
+
+An independent audit of the first version found that its published metrics could not be
+reproduced on another machine, that "pre-authorisation not required" for a procedure that
+required it scored as safely as having it, and that the per-field points could explode or
+point the wrong way. Each finding is fixed and pinned by a test: the build is deterministic and
+checked weekly in CI, contradictory answers are impossible to enter, attribution is exact, and
+the API validates every value before the model sees it. The rebuilt model is stronger than the
+one it replaced.
 
 ## Honest about the loop
 
-When staff disagree with a prediction, one click logs it as a labelled example. We are not
-claiming live self-improvement; nobody in this industry has that. Real products close the
-loop by parsing the 835 remittance files insurers return, and retraining as outcomes
-accumulate over weeks. Our architecture supports that. The demo logs the correction and says
-plainly that it does nothing more.
+When staff disagree with a prediction, one click logs it as a labelled example, with an
+optional note. We are not claiming live self-improvement; nobody in this industry has that. Real
+products close the loop by parsing the 835 remittance files insurers return, and retraining as
+outcomes accumulate over weeks. Our architecture supports that. The demo logs the correction and
+says plainly that it does nothing more.
 
 ## What production would need
 
 1. Real historical claims with real adjudication outcomes, from a partner clinic or TPA
 2. Parsed 835 remittance advice, to capture the CARC codes insurers actually returned
 3. Retraining as those outcomes accumulate, with human corrections as labels
-4. Per-insurer models — filing rules and tariffs differ by payer
+4. Per-insurer models and rule tables — filing rules, pre-authorisation lists and tariffs
+   differ by payer
 
 The system we built supports all four. It simply cannot access the data they require.
 
 ## Stack
 
-Python 3.12, LightGBM, SHAP, FastAPI · Next.js 16, TypeScript, Tailwind ·
-Qwen (`qwen-plus`) via Alibaba Cloud DashScope. Both services are containerised, and
-[`deployment.md`](deployment.md) is a tested runbook for Alibaba Cloud ECS; the demo
-runs locally.
+Python 3.12, LightGBM, FastAPI · Next.js 16, TypeScript, Tailwind · Qwen (`qwen-plus`) via
+Alibaba Cloud DashScope. Both services are containerised; [`deployment.md`](deployment.md) is
+the runbook for Alibaba Cloud ECS. The images' build steps have been replayed and verified
+locally, but the containers themselves have not yet been built or deployed — the demo runs
+locally.
 
 Architecture diagram: [`architecture.svg`](architecture.svg).
