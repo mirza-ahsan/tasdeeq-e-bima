@@ -5,31 +5,23 @@ Every path that produces a probability — training metrics, the model card, and
 
 Two decisions live here.
 
-**Clamping.** Calibration can push extreme scores to 0 or 1. On the test split, claims
-scored exactly 1.0 were actually rejected only a third of the time, so the saturation was
-genuine overconfidence rather than a display quirk. We clamp to a defensible range.
+**Clamping.** Calibration can push extreme scores to 0 or 1. Claims scored exactly 1.0
+were not rejected every time, so the saturation was genuine overconfidence rather than a
+display quirk. We clamp to a defensible range.
 
-**Isotonic rather than Platt scaling.** Both were measured. Platt is smoother — 340
-distinct output values against isotonic's 76 — and marginally better at ranking (AUC
-0.802 vs 0.799, since isotonic's ties cost a little discrimination). Isotonic still wins
-where it matters:
+**Centred isotonic rather than plain isotonic or Platt.** Isotonic regression is the
+better-calibrated of the two classical choices, and Platt's compressed distribution
+flattened the information gains until the engine asked nearly everyone the same thing.
+But plain isotonic is a staircase. Its wide flat steps froze the risk figure across
+several answers that did move the model, and put the band boundaries on the edge of a
+step, where a claim's verdict flipped on a hair's difference in score: a clean
+consultation sat at 20.1% through four good answers, against a low band ending at 20%.
 
-  * better calibrated (Brier 0.1485 vs 0.1523), so the percentage on screen is the
-    more trustworthy number, which is the whole point of showing one;
-  * far better adaptive behaviour — 65-72 distinct question orders across 200 claims
-    versus 15 under Platt. That is the project's core differentiator, and Platt's
-    compressed distribution (75% of claims between 0.15 and 0.27) flattens the
-    information gains until the engine asks nearly everyone the same thing.
-
-The known cost is plateaus: 33% of claims land on exactly 0.1772, so the risk figure can
-sit unchanged across consecutive answers. That is honest — the answer genuinely did not
-change the estimate — and the UI should say "no change" rather than pretend to animate.
-
-One finding worth keeping: under Platt, risky claims resolve FASTER than clean ones at
-every band setting tried. That is structural rather than a tuning failure. A single bad
-answer pushes a claim over the high threshold immediately, whereas certifying a claim as
-clean means ruling out every remaining risk factor. Isotonic's plateau happens to sit just
-under the low band, which is what lets clean claims stop early.
+Centred isotonic regression (Oron & Flournoy, 2017) keeps isotonic's fitted value for
+each block of tied predictions but places it at the block's centre and interpolates
+linearly between neighbouring blocks. The block means — and so the calibration — are
+unchanged; the steps between them become slopes, so every answer that moves the model
+moves the number on screen.
 """
 
 from __future__ import annotations
@@ -41,8 +33,35 @@ PROB_FLOOR = 0.02
 PROB_CEIL = 0.97
 
 
-def build_calibrator() -> IsotonicRegression:
-    return IsotonicRegression(out_of_bounds="clip")
+class CenteredIsotonic:
+    """Monotone, piecewise-linear calibrator through isotonic block centres."""
+
+    def fit(self, raw: np.ndarray, y: np.ndarray) -> "CenteredIsotonic":
+        raw = np.asarray(raw, dtype=float)
+        y = np.asarray(y, dtype=float)
+        order = np.argsort(raw, kind="mergesort")
+        r = raw[order]
+        fitted = IsotonicRegression(out_of_bounds="clip").fit(r, y[order]).predict(r)
+
+        # Runs of equal fitted value are isotonic's blocks; each becomes one knot.
+        edges = np.flatnonzero(np.diff(fitted)) + 1
+        starts = np.r_[0, edges]
+        stops = np.r_[edges, len(r)]
+        xs = np.array([r[a:b].mean() for a, b in zip(starts, stops)])
+        ys = fitted[starts]
+        # Hold the end values flat beyond the outermost centres.
+        self.x_ = np.r_[r[0], xs, r[-1]]
+        self.y_ = np.r_[ys[0], ys, ys[-1]]
+        keep = np.r_[True, np.diff(self.x_) > 0]
+        self.x_, self.y_ = self.x_[keep], self.y_[keep]
+        return self
+
+    def predict(self, raw: np.ndarray) -> np.ndarray:
+        return np.interp(np.asarray(raw, dtype=float), self.x_, self.y_)
+
+
+def build_calibrator() -> CenteredIsotonic:
+    return CenteredIsotonic()
 
 
 def predict_proba(booster, calibrator, X) -> np.ndarray:
