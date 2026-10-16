@@ -42,8 +42,9 @@ data/processed/*
 backend/feedback.db
 
 # ---- Local tooling ----
-# MCP servers are per-developer setup, not part of the product.
+# MCP servers and agent worktrees are per-developer setup, not part of the product.
 .mcp.json
+.claude/worktrees/
 
 # ---- OS / editor ----
 .DS_Store
