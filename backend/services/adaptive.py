@@ -462,7 +462,7 @@ def value_label(feature: str, value: object) -> str:
         return f"{n} day{'s' if n != 1 else ''}"
     if feature == "prior_claims_30d":
         n = int(value)
-        return "None" if n == 0 else f"{n} claim{'s' if n > 1 else ''}"
+        return "No other claims" if n == 0 else f"{n} claim{'s' if n > 1 else ''}"
     if feature == "patient_age":
         return f"{int(value)} years"
     if isinstance(value, float):

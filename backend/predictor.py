@@ -101,6 +101,7 @@ class Predictor:
         Every field not in `players` (the patient context) is held fixed, so the
         starting estimate is the claim as it stood before the first question.
         """
+        players = list(dict.fromkeys(players))   # a field counted twice would break additivity
         fixed = {k: v for k, v in answers.items() if k not in players}
         n = len(players)
         if n == 0:

@@ -28,7 +28,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from backend import feedback_store
 from backend.config import cors_origins, load_dashscope_config, trust_proxy_headers
@@ -44,7 +46,7 @@ from backend.services.adaptive import (MAX_QUESTIONS, MIN_QUESTIONS, NUMBER_LIMI
                                        feature_label, validate_answer, value_label)
 from backend.services.checks import build_checks
 from backend.services.explain_qwen import ClaimPrediction, FlaggedField, explain
-from ml.features import ASKABLE_FEATURES, BILL_FEATURES, CONTEXT_FEATURES
+from ml.features import ASKABLE_FEATURES, BILL_FEATURES, CONTEXT_FEATURES, defect_codes
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +57,15 @@ CARC_CODES = {c["code"]: c for c in
 
 MAX_SESSIONS = 500
 SESSION_TTL_S = 30 * 60
-STARTS_PER_MINUTE = 30          # per client
+# Per client, per minute. Starting a check is the expensive, store-growing action; the
+# others only need to stop one client draining the shared Qwen budget or the log.
+STARTS_PER_MINUTE = 30
+ANSWERS_PER_MINUTE = 120
+RESULTS_PER_MINUTE = 30
+FEEDBACK_PER_MINUTE = 10
 
-# Presentation thresholds: below these, a value is noise and showing it misleads.
+# Presentation threshold: below this, a contribution is noise and showing it misleads.
 MIN_CONTRIBUTION_POINTS = 1.0     # percentage points
-MIN_ALTERNATIVE_CONFIDENCE = 0.05
 
 
 # --- sessions ----------------------------------------------------------------
@@ -72,6 +78,7 @@ class Session:
     last_step: Step | None = None
     last_change: ChangeOut | None = None
     result: tuple[str, ResultOut] | None = None         # (claim state, cached result)
+    feedback: tuple[str, int] | None = None             # (claim state, logged row)
     last_seen: float = field(default_factory=time.monotonic)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -129,15 +136,15 @@ class RateLimiter:
         self._hits: dict[str, deque[float]] = {}
         self._lock = threading.Lock()
 
-    def check(self, key: str) -> None:
+    def check(self, key: str, what: str = "checks started") -> None:
         now = time.monotonic()
         with self._lock:
             hits = self._hits.setdefault(key, deque())
             while hits and now - hits[0] > 60:
                 hits.popleft()
             if len(hits) >= self.per_minute:
-                raise HTTPException(429, "Too many checks started from here in the last "
-                                         "minute. Wait a moment and try again.")
+                raise HTTPException(429, f"Too many {what} from here in the last minute. "
+                                         "Wait a moment and try again.")
             hits.append(now)
             if len(self._hits) > 10_000:   # forget idle clients rather than grow forever
                 for k in [k for k, v in self._hits.items() if not v or now - v[-1] > 60]:
@@ -146,10 +153,33 @@ class RateLimiter:
 
 sessions = SessionStore()
 start_limiter = RateLimiter(STARTS_PER_MINUTE)
+answer_limiter = RateLimiter(ANSWERS_PER_MINUTE)
+result_limiter = RateLimiter(RESULTS_PER_MINUTE)
+feedback_limiter = RateLimiter(FEEDBACK_PER_MINUTE)
 
 app = FastAPI(title="Claim Rejection Risk Predictor", version=VERSION)
 app.add_middleware(CORSMiddleware, allow_origins=cors_origins(),
                    allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
+
+
+@app.exception_handler(RequestValidationError)
+def invalid_request(_: Request, exc: RequestValidationError) -> JSONResponse:
+    """A malformed request, in one sentence. FastAPI's default echoes every submitted value
+    back, and crashes with a 500 when one of them is NaN or Infinity."""
+    first = exc.errors()[0] if exc.errors() else {}
+    field = next((str(p) for p in reversed(first.get("loc", ())) if isinstance(p, str)
+                  and p != "body"), None)
+    kind = str(first.get("type", ""))
+    if field is None or kind == "json_invalid":
+        message = "The request could not be read."
+    else:
+        reason = ("must be a whole number" if kind.startswith("int_")
+                  else "is not one of the listed options" if kind == "literal_error"
+                  else "is required" if kind == "missing"
+                  else "must be text" if kind.startswith("string_")
+                  else "is not valid")
+        message = f"{field.replace('_', ' ').capitalize()} {reason}."
+    return JSONResponse(status_code=422, content={"detail": message})
 
 # Built on first use rather than at import, so a missing model directory leaves the app
 # up and reporting "degraded" on /api/health instead of failing to start at all.
@@ -170,10 +200,14 @@ def get_engine() -> AdaptiveEngine:
 
 
 def client_key(request: Request) -> str:
+    """Who to rate-limit. Behind our own proxy, the *rightmost* X-Forwarded-For entry is the
+    one that proxy wrote; anything to its left came from the client and is not evidence of
+    anything. Taking the leftmost let a caller pick a fresh identity per request."""
     if trust_proxy_headers():
-        forwarded = request.headers.get("x-forwarded-for", "")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
+        hops = [h.strip() for h in request.headers.get("x-forwarded-for", "").split(",")]
+        hops = [h for h in hops if h]
+        if hops:
+            return hops[-1]
     return request.client.host if request.client else "unknown"
 
 
@@ -245,6 +279,20 @@ def _carc_out(code: str, confidence: float) -> CarcOut:
                    staff_action=meta.get("staff_action", ""))
 
 
+def _reasons(engine: AdaptiveEngine, answers: dict, derived: dict) -> list[CarcOut]:
+    """Reason codes for the defects actually present in the claim, most likely first.
+
+    The reason model ranks them; it never adds one. Naming "documents missing" for a claim
+    whose documents were never asked about would be a guess presented as a finding.
+    """
+    present = defect_codes({**answers, **derived})
+    if not present:
+        return []
+    ranked = dict(engine.p.predict_carc(answers, top_n=len(engine.p.carc_classes)))
+    present.sort(key=lambda c: -ranked.get(c, 0.0))
+    return [_carc_out(c, ranked.get(c, 0.0)) for c in present]
+
+
 def _start(answers: dict, engine: AdaptiveEngine) -> StepOut:
     session = sessions.create(answers)
     with session.lock:
@@ -272,7 +320,7 @@ def start_demo(which: str, request: Request) -> StepOut:
     and fed in as the loop asks for it, so the demo shows the real adaptive behaviour.
     """
     if which not in DEMO_CLAIMS:
-        raise HTTPException(404, f"Unknown demo claim '{which}'. Try: {sorted(DEMO_CLAIMS)}")
+        raise HTTPException(404, "There is no such demo claim.")
     start_limiter.check(client_key(request))
     engine = get_engine()
     return _start({f: DEMO_CLAIMS[which][f] for f in CONTEXT_FEATURES}, engine)
@@ -282,7 +330,7 @@ def start_demo(which: str, request: Request) -> StepOut:
 def demo_answers(which: str) -> dict:
     """The scripted answers, so the UI can suggest each one as it is asked."""
     if which not in DEMO_CLAIMS:
-        raise HTTPException(404, f"Unknown demo claim '{which}'.")
+        raise HTTPException(404, "There is no such demo claim.")
     return DEMO_CLAIMS[which]
 
 
@@ -294,7 +342,7 @@ def demo_preview(which: str) -> PreviewOut:
     """What the scripted claim does, end to end, without starting a session. Computed
     once per process: the models and the script never change while it runs."""
     if which not in DEMO_CLAIMS:
-        raise HTTPException(404, f"Unknown demo claim '{which}'.")
+        raise HTTPException(404, "There is no such demo claim.")
     if which in _previews:
         return _previews[which]
     engine = get_engine()
@@ -320,7 +368,8 @@ def demo_preview(which: str) -> PreviewOut:
                         effect="increases_risk" if points[top] > 0 else "reduces_risk",
                         contribution_points=round(points[top], 1))
               if top and abs(points[top]) >= MIN_CONTRIBUTION_POINTS else None)
-    carc = _carc_out(*engine.p.predict_carc(answers, top_n=1)[0]) if step.risk_band != "low" else None
+    reasons = _reasons(engine, answers, engine.p.derived(answers))
+    carc = reasons[0] if reasons and step.risk_band != "low" else None
     _previews[which] = PreviewOut(
         claim_label=bill, patient_label=_patient(answers).label, path=path,
         risk_band=step.risk_band, probability=round(step.probability, 4),
@@ -329,12 +378,13 @@ def demo_preview(which: str) -> PreviewOut:
 
 
 @app.post("/api/session/{session_id}/answer", response_model=StepOut)
-def submit_answer(session_id: str, req: AnswerRequest) -> StepOut:
+def submit_answer(session_id: str, req: AnswerRequest, request: Request) -> StepOut:
+    answer_limiter.check(client_key(request), "answers")
     engine = get_engine()
     session = sessions.get(session_id)
     with session.lock:
         if req.feature not in ASKABLE_FEATURES:
-            raise HTTPException(400, f"'{req.feature}' is not a question in this check.")
+            raise HTTPException(400, "That is not a question in this check.")
         step = session.last_step
         current = step.question.feature if step and step.question else None
         editing = req.feature in session.order
@@ -344,6 +394,11 @@ def submit_answer(session_id: str, req: AnswerRequest) -> StepOut:
             value = validate_answer(req.feature, req.value, engine.p)
         except InvalidAnswer as exc:
             raise HTTPException(422, str(exc))
+
+        if editing and session.answers.get(req.feature) == value and step is not None:
+            # Re-sending an unchanged answer changes nothing, so it must not invalidate
+            # the cached result either (that would let a client force fresh Qwen calls).
+            return _step_out(session, step, engine)
 
         before = step.probability if step else engine.p.predict(session.answers)
         session.answers[req.feature] = value
@@ -359,7 +414,8 @@ def submit_answer(session_id: str, req: AnswerRequest) -> StepOut:
 
 
 @app.get("/api/session/{session_id}/result", response_model=ResultOut)
-def get_result(session_id: str) -> ResultOut:
+def get_result(session_id: str, request: Request) -> ResultOut:
+    result_limiter.check(client_key(request), "results")
     engine = get_engine()
     session = sessions.get(session_id)
     with session.lock:
@@ -383,23 +439,23 @@ def get_result(session_id: str) -> ResultOut:
         total = sum(attribution.points.values())
         other = round(total - sum(d.contribution_points for d in drivers), 1)
 
-        # The reason model is trained on rejected claims only, so its output is only
-        # meaningful when the claim actually looks as if it will be rejected. Naming a
-        # "most likely rejection reason" for a claim that looks clean would be inventing one.
-        carc, alternatives = None, []
-        if step.risk_band != "low":
-            ranked_codes = predictor.predict_carc(answers, top_n=3)
-            carc = _carc_out(*ranked_codes[0])
-            # Only surface alternatives with real support. "CARC 16 (0%)" reads as a bug.
-            alternatives = [_carc_out(c, p) for c, p in ranked_codes[1:]
-                            if p >= MIN_ALTERNATIVE_CONFIDENCE]
+        # Reasons come only from defects the clerk's answers actually show, ranked by the
+        # reason model. For a claim that is not low risk the first is "the most likely
+        # reason"; for a low-risk claim that still has one, it is something to fix first,
+        # so the tool never calls a claim ready to submit while it knows of a problem.
+        derived = predictor.derived(answers)
+        reasons = _reasons(engine, answers, derived)
+        carc = reasons[0] if reasons and step.risk_band != "low" else None
+        alternatives = reasons[1:] if carc else []
+        fix_first = reasons[0] if reasons and step.risk_band == "low" else None
 
         checks = _checks(engine, answers)
+        lead = carc or fix_first
         prediction = ClaimPrediction(
             rejection_probability=step.probability, risk_band=step.risk_band,
-            carc_code=carc.code if carc else None,
-            carc_reason=carc.plain_english if carc else None,
-            staff_action=carc.staff_action if carc else None,
+            carc_code=lead.code if lead else None,
+            carc_reason=lead.plain_english if lead else None,
+            staff_action=lead.staff_action if lead else None,
             flagged_fields=[FlaggedField(label=d.label, value=d.value_label, effect=d.effect,
                                          contribution_points=d.contribution_points)
                             for d in drivers[:4]],
@@ -413,6 +469,7 @@ def get_result(session_id: str) -> ResultOut:
             typical_probability=round(attribution.base_probability, 4),
             n_answered=step.n_answered, stop_reason=step.stop_reason,
             drivers=drivers, other_points=other, carc=carc, carc_alternatives=alternatives,
+            fix_first=fix_first,
             explanation=ExplanationOut(text=explanation.text, source=explanation.source,
                                        model=explanation.model),
             patient=_patient(answers), claim=claim, answered=answered, checks=checks)
@@ -421,18 +478,24 @@ def get_result(session_id: str) -> ResultOut:
 
 
 @app.post("/api/feedback", response_model=FeedbackResponse)
-def submit_feedback(req: FeedbackRequest) -> FeedbackResponse:
+def submit_feedback(req: FeedbackRequest, request: Request) -> FeedbackResponse:
+    feedback_limiter.check(client_key(request), "corrections")
     session = sessions.get(req.session_id)
     with session.lock:
         step = session.last_step
         if step is None or not step.done:
             raise HTTPException(409, "There is no verdict to correct yet.")
+        key = session.state_key()
+        if session.feedback and session.feedback[0] == key:
+            # One correction per verdict; clicking again does not add rows.
+            return FeedbackResponse(ok=True, logged_id=session.feedback[1])
         carc = (session.result[1].carc.code
                 if session.result and session.result[1].carc else None)
         logged_id = feedback_store.log_feedback(
             session_id=session.id, predicted_prob=step.probability,
             predicted_carc=carc, n_answered=step.n_answered,
             answers=session.answers, note=req.note)
+        session.feedback = (key, logged_id)
     return FeedbackResponse(ok=True, logged_id=logged_id)
 
 
@@ -456,14 +519,18 @@ def meta() -> MetaOut:
         test_auc=m["metrics"]["test_auc_full"], verdicts=m["product_test"])
 
 
-@app.get("/api/health", response_model=HealthOut)
-def health() -> HealthOut:
-    """Liveness for the container and the masthead. Never fails, and discloses nothing
-    about the account: whether Qwen is configured, not where or as whom."""
+@app.get("/api/health", response_model=HealthOut,
+         responses={503: {"model": HealthOut, "description": "Models failed to load"}})
+def health() -> HealthOut | JSONResponse:
+    """Health for the container and the masthead. Discloses nothing about the account:
+    whether Qwen is configured, not where or as whom. Answers 503 when the models are not
+    loaded, so the container's healthcheck (and compose's service_healthy) fails rather
+    than reporting a service that cannot answer a single claim."""
     try:
         get_engine()
         loaded = True
     except HTTPException:
         loaded = False
-    return HealthOut(status="ok" if loaded else "degraded", models_loaded=loaded,
+    body = HealthOut(status="ok" if loaded else "degraded", models_loaded=loaded,
                      qwen_configured=load_dashscope_config().is_configured, version=VERSION)
+    return body if loaded else JSONResponse(status_code=503, content=body.model_dump())

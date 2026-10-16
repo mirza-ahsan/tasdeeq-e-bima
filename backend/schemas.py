@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 
 RiskBand = Literal["low", "medium", "high"]
 CheckStatus = Literal["ok", "warn", "issue", "pending"]
@@ -88,10 +88,11 @@ class StepOut(BaseModel):
 
 
 class StartRequest(BaseModel):
-    patient_age: int
+    # Strict: JSON true is not an age, and 44.5 is not a whole number of rupees.
+    patient_age: StrictInt
     patient_gender: Literal["M", "F"]
     procedure_category: str
-    claim_amount_pkr: int
+    claim_amount_pkr: StrictInt
 
 
 class AnswerRequest(BaseModel):
@@ -133,8 +134,12 @@ class ResultOut(BaseModel):
     stop_reason: str | None
     drivers: list[DriverOut]        # contributions of at least one point, largest first
     other_points: float             # the rest, so the waterfall still adds up
+    # The most likely rejection reason, chosen only among defects actually present in the
+    # claim, and only for a claim that is not low risk.
     carc: CarcOut | None
     carc_alternatives: list[CarcOut] = []
+    # A low-risk claim that still carries a known defect: what to fix before submitting.
+    fix_first: CarcOut | None = None
     explanation: ExplanationOut
     patient: PatientOut
     claim: list[FieldOut]
