@@ -6,7 +6,7 @@ original `plan.md` (narrative/pitch) and `claim-predictor-project-brief.md` (bui
 which have been removed from the repo. Inline `§` citations below refer back to those originals
 and are kept as provenance for where each decision came from.
 
-- **Timeline:** 3–7 days, solo
+- **Timeline:** 3–7 days, two authors (Mirza Ahsan Baig and Safee Akmal)
 - **Language:** English only (Urdu dropped; see [Deferred](#deferred--explicitly-not-building))
 - **Deployment:** local first, Alibaba Cloud as the final phase
 - **Guiding rule:** this is a *demo prototype*. If a shortcut makes the demo easier to build without hiding the core idea, take it.
@@ -132,7 +132,7 @@ for the multiclass CARC head in Phase 3.
 - **Mismatch features are corrupted, not coin-flipped.** `diagnosis_procedure_match` and the CARC 6 age inconsistency are produced by reassigning a real field, so the inconsistency is a learnable relationship between two fields the model can see — not unlearnable noise.
 - **Two tuning rounds needed.** The first pass came out at 41% rejection; both defect *incidence* and rule fire probabilities had to come down, not just the probabilities.
 
-**Feature set as built** (22 features):
+**Feature set as built** (22 columns; the models used 20 — superseded in Phase 8, see there):
 
 | Feature | Type | Asked in the flow? |
 |---|---|---|
@@ -150,7 +150,7 @@ for the multiclass CARC head in Phase 3.
 | `diagnosis_procedure_match` | boolean | ✅ |
 | `is_duplicate_submission` | boolean | ✅ |
 | `prior_claims_30d` | numeric | ✅ |
-| `patient_age_band` | categorical, 6 levels | ✅ |
+| `patient_age_band` | categorical, 6 levels | ✖ — built but never used by a model; removed in Phase 8 |
 | `pre_auth_required_for_procedure` | derived boolean | ✖ |
 | `amount_vs_procedure_median` | derived ratio | ✖ |
 | `days_vs_insurer_filing_limit` | derived ratio | ✖ |
@@ -267,7 +267,7 @@ claims being rejected is the number behaving correctly. Do not "fix" it.
 - [x] Session state: in-memory dict keyed by `session_id`, bounded at 500 with oldest-first eviction. No auth, no persistence beyond the process.
 - [x] Display helpers in `adaptive.py` — `feature_label()` / `value_label()` turn model field names into text a clinic clerk reads
 - [x] Qwen wired into `/result`; fallback path verified
-- [x] `tests/test_api.py` — **9 tests**; full suite now **20 passing**
+- [x] `tests/test_api.py` — **9 tests**; full suite now **20 passing** (a 10th API test was added in Phase 6: 21 in total)
 
 **Endpoints**
 
@@ -357,8 +357,9 @@ which is what makes this look like a clinical instrument rather than a template.
   LightGBM is tree-path-dependent and needs no background dataset; nothing ever read it
 - Removed `feedback_store.count()` — no callers
 - Removed unused `DERIVED_FEATURES` import from `train.py`
-- Removed the Next.js template leftovers: `public/*.svg`, the default `favicon.ico`,
-  and the scaffold's `AGENTS.md` / `CLAUDE.md`. Added a real `app/icon.svg`.
+- Removed the Next.js template leftovers: `public/*.svg` and the default `favicon.ico`.
+  Added a real `app/icon.svg`. (`frontend/AGENTS.md` / `CLAUDE.md` were removed here too, but
+  `next dev` regenerates them, so they are kept tracked.)
 
 **Verified walkthrough**
 
@@ -415,6 +416,86 @@ clean, production build clean, both demo claims driven through the real UI in a 
 - The "This prediction is wrong" button, confirmed writing rows to SQLite
 - Light mode, which the development machine's dark-mode extension had been masking
 - Backend-down behaviour: the UI degrades to a clear message rather than a blank screen
+
+---
+
+## Phase 8 — Audit remediation ✅ COMPLETE
+
+An external audit of commit `a547b88` (16 Oct 2026) found that the published metrics could not
+be reproduced, and several logic gaps let wrong answers through on exactly the mistakes the tool
+exists to catch. Every item is addressed; the rebuilt model is stronger than the one it replaced.
+
+**Reproducibility (R1–R5).** The audit's rebuild got AUC 0.717 and accuracy below the
+"approve everything" baseline. Root cause, confirmed here: the bundle was byte-identical, and on
+this machine the old pipeline *did* reproduce 0.788 — but the primary procedure was picked by an
+unstable sort, and 1,031 of 3,956 encounters tie on cost across categories, so tie order depended
+on the CPU and library build. Fixed with a deterministic tie-break (category priority, SNOMED
+code, description, stable sort); Synthea pinned by SHA-256 (bundle and the five tables read);
+`uv sync --frozen` everywhere; trained artefacts and the labelled dataset committed; the Docker
+image ships them instead of retraining; CI rebuilds weekly and fails on dataset or metric drift
+(`scripts/check_drift.py`). Hyperparameters now come from grouped 5-fold CV on train, the
+calibrator from that CV's out-of-fold predictions, the bands from validation; test is used once.
+`ml/evaluate.py` cross-checks every figure against `metadata.json`.
+
+**Product logic (L1–L10).** Pre-authorisation is no longer a free answer: whether it was
+*required* is derived from the procedure and amount, "not required" is never offered when it
+was, and contradictory input is coerced to "not obtained". Diagnosis/procedure fit and
+procedure/patient fit are derived facts, not questions. Patient age and sex are entered at
+intake (they were silently 44 and female). Emergencies get the pre-authorisation leeway the UI
+copy promised. Noise and base-rate rejections carry rule-driven reason codes or none, instead of
+random ones. Prices are anchored per category to Pakistani clinic rates. "labor" no longer
+matches "laboratory". Headline copy says "high risk" and only says "more likely rejected than
+accepted" at ≥ 50%. Binary metrics are reported at the band the UI uses; the unused tuned
+threshold is gone. Six deterministic rule checks expose the policy facts the clerk may not know.
+
+**Attribution and explanation (E1–E4).** Rescaled log-odds SHAP (up to 641 points, 4% with the
+wrong sign) is replaced by exact Shapley values of the calibrated probability, which sum to the
+on-screen change. The fallback no longer prints "CARC none". Qwen's timeout budget fits inside
+the proxy's. Qwen's reply is validated at runtime — any number not in the payload, a misstated
+risk, or a quantity in words sends the template instead — and tests mock the client.
+
+**API, privacy, deployment, frontend, tests (S1–S8, P1–P3, D1–D7, F1–F9, T1–T5).** Every value
+validated against the training vocabulary and ranges (422); only the current or an already-asked
+question can be answered; no result before the loop finishes; bounded, expiring, thread-safe
+sessions; per-client rate limits; result caching and a global Qwen call budget; a health
+endpoint that reveals nothing about the account; non-root containers; one origin through the web
+app's `/api` proxy with the API address read at runtime; configurable CORS; a feedback log path
+that tests redirect; friendly errors, answer editing, number limits, bands from the API, security
+headers; frontend unit tests.
+
+**Problems found during the remediation, and fixed:**
+- **Clearing a claim without asking what it was.** With information gain choosing every
+  question, a minor surgery without pre-authorisation could be cleared as low risk without the
+  procedure ever being asked — the procedure's value is that it unlocks the pre-authorisation
+  question, which a one-step look-ahead cannot see. Fixed structurally: the bill (procedure,
+  amount) is entered at intake, and a required pre-authorisation is always the first question.
+- **The loop had collapsed into a fixed form** (307 of 361 validation claims opened with the
+  same four questions) because document, panel, policy and duplicate defects were generated
+  independently of the claim. Document incompleteness and duplicates now depend on procedure
+  complexity, as they do in practice.
+- **A clean claim could not be certified.** At 8% label noise plus 2.5% base rate, a claim with no
+  defect was still rejected one time in ten; "looks ready to submit" had only ever been reachable
+  because a band edge sat between two calibration plateaus. Noise is now 5%, base 2%.
+- **Answers that did nothing.** LightGBM sends a missing *categorical* down the catch-all side
+  of a split, so "documents: not yet asked" scored the same as "complete". Unknown is now an
+  explicit category.
+- **A frozen gauge.** Plain isotonic calibration is a staircase; a clean consultation sat at 20.1%
+  through four good answers, next to a band edge at 20%. Replaced with centred isotonic
+  regression (same block means, slopes between them).
+- **Band tuning gamed its own objective** — a "low" band ending above the average claim's risk.
+  Bands must now straddle the base rate, and a typical claim must read "medium" for every patient.
+
+**Final metrics** (test split, 362 claims)
+
+| | |
+|---|---|
+| ROC AUC, full / partial | **0.849** / 0.763 (was 0.788 / 0.733, not reproducible) |
+| Verdicts | low 62% (89% accepted) · medium 12% · high 26% (56% rejected) |
+| Rejections flagged | 72% |
+| Accuracy at the high-risk line | 81.8% vs 76.2% baseline — gate PASS |
+| Questions | 3.4 accepted / 3.6 rejected; 52 distinct orders |
+| CARC top-1 / top-3 | 88.1% / 99.3% (high because labels are rule-driven; see model card) |
+| Tests | 53 Python (+1 opt-in live), 9 frontend |
 
 ---
 
