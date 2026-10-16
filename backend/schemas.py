@@ -175,6 +175,24 @@ class MetaOut(BaseModel):
     verdicts: dict[str, Any]        # test-split verdict quality, for the about panel
 
 
+class PreviewPoint(BaseModel):
+    label: str
+    value_label: str
+    probability: float
+
+
+class PreviewOut(BaseModel):
+    """A scripted claim's whole path, for the landing page's live specimen."""
+
+    claim_label: str
+    patient_label: str
+    path: list[PreviewPoint]        # the bill first, then each answer in the order asked
+    risk_band: RiskBand
+    probability: float
+    top_driver: DriverOut | None
+    carc: CarcOut | None
+
+
 class HealthOut(BaseModel):
     status: Literal["ok", "degraded"]
     models_loaded: bool

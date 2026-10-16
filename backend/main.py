@@ -37,7 +37,8 @@ from backend.predictor import Attribution, get_predictor
 from backend.schemas import (AnswerRequest, BandsOut, CarcOut, ChangeOut, CheckOut,
                              DriverOut, ExplanationOut, FeedbackRequest, FeedbackResponse,
                              FieldOut, HealthOut, MetaOut, OptionOut, PatientOut,
-                             ProcedureOption, QuestionOut, ResultOut, StartRequest, StepOut)
+                             PreviewOut, PreviewPoint, ProcedureOption, QuestionOut,
+                             ResultOut, StartRequest, StepOut)
 from backend.services.adaptive import (MAX_QUESTIONS, MIN_QUESTIONS, NUMBER_LIMITS,
                                        VALUE_LABELS, AdaptiveEngine, InvalidAnswer, Step,
                                        feature_label, validate_answer, value_label)
@@ -283,6 +284,48 @@ def demo_answers(which: str) -> dict:
     if which not in DEMO_CLAIMS:
         raise HTTPException(404, f"Unknown demo claim '{which}'.")
     return DEMO_CLAIMS[which]
+
+
+_previews: dict[str, PreviewOut] = {}
+
+
+@app.get("/api/demo/{which}/preview", response_model=PreviewOut)
+def demo_preview(which: str) -> PreviewOut:
+    """What the scripted claim does, end to end, without starting a session. Computed
+    once per process: the models and the script never change while it runs."""
+    if which not in DEMO_CLAIMS:
+        raise HTTPException(404, f"Unknown demo claim '{which}'.")
+    if which in _previews:
+        return _previews[which]
+    engine = get_engine()
+    claim = DEMO_CLAIMS[which]
+    answers = {f: claim[f] for f in CONTEXT_FEATURES}
+    bill = (f"{value_label('procedure_category', claim['procedure_category'])} · "
+            f"{value_label('claim_amount_pkr', claim['claim_amount_pkr'])}")
+    path = [PreviewPoint(label="Bill entered", value_label=bill,
+                         probability=round(engine.p.predict(answers), 4))]
+    order: list[str] = []
+    step = engine.next_step(answers)
+    while not step.done:
+        f = step.question.feature
+        answers[f] = claim[f]
+        order.append(f)
+        step = engine.next_step(answers)
+        path.append(PreviewPoint(label=feature_label(f), value_label=value_label(f, claim[f]),
+                                 probability=round(step.probability, 4)))
+    points = engine.p.attribute(answers, [*BILL_FEATURES, *order]).points
+    top = max(points, key=lambda f: points[f]) if points else None
+    driver = (DriverOut(feature=top, label=feature_label(top),
+                        value_label=value_label(top, answers[top]),
+                        effect="increases_risk" if points[top] > 0 else "reduces_risk",
+                        contribution_points=round(points[top], 1))
+              if top and abs(points[top]) >= MIN_CONTRIBUTION_POINTS else None)
+    carc = _carc_out(*engine.p.predict_carc(answers, top_n=1)[0]) if step.risk_band != "low" else None
+    _previews[which] = PreviewOut(
+        claim_label=bill, patient_label=_patient(answers).label, path=path,
+        risk_band=step.risk_band, probability=round(step.probability, 4),
+        top_driver=driver, carc=carc)
+    return _previews[which]
 
 
 @app.post("/api/session/{session_id}/answer", response_model=StepOut)
