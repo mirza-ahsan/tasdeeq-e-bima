@@ -33,8 +33,9 @@ class DashScopeConfig:
         return bool(self.api_key)
 
     def status(self) -> dict[str, str]:
-        """Diagnostic summary. Deliberately reports only presence of the key,
-        never its value, length, or any prefix."""
+        """Local diagnostic summary for scripts/test_dashscope.py. Reports only the
+        presence of the key, never its value, length, or any prefix. The endpoint and
+        workspace identify the account, so this is never served over HTTP."""
         return {
             "DASHSCOPE_API_KEY": "set" if self.api_key else "MISSING",
             "DASHSCOPE_BASE_URL": self.base_url,
@@ -58,3 +59,19 @@ def load_dashscope_config() -> DashScopeConfig:
         workspace_id=_clean("DASHSCOPE_WORKSPACE_ID"),
         model=_clean("QWEN_MODEL") or DEFAULT_MODEL,
     )
+
+
+DEFAULT_CORS_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000")
+
+
+def cors_origins() -> list[str]:
+    """Browser origins allowed to call the API directly. The web app normally reaches
+    the API through its own same-origin proxy, so this only matters for direct use."""
+    raw = _clean("CORS_ORIGINS")
+    return [o.strip() for o in raw.split(",") if o.strip()] if raw else list(DEFAULT_CORS_ORIGINS)
+
+
+def trust_proxy_headers() -> bool:
+    """Whether X-Forwarded-For identifies the client. Only true behind a proxy we run
+    (the web app's /api route, nginx); otherwise any caller could pick their own IP."""
+    return (_clean("TRUST_PROXY_HEADERS") or "").lower() in {"1", "true", "yes"}

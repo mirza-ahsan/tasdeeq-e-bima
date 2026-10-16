@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Standalone end-to-end check for the DashScope / Qwen connection.
 
-Run this BEFORE wiring Qwen into the adaptive question flow:
+Run this before a demo, to confirm Qwen will actually be used rather than the fallback:
 
     uv run python scripts/test_dashscope.py
 
 Three checks:
   1. All four environment variables resolve (key presence only — never its value).
   2. A raw chat completion reaches the endpoint and comes back.
-  3. The real explanation layer produces advice from a sample prediction.
+  3. The real explanation layer produces advice from a sample prediction, and that
+     advice passes the same validation the API applies before showing it.
 
 This script never prints, logs, or echoes the API key.
 """
@@ -30,30 +31,26 @@ from backend.services.explain_qwen import (
 )
 
 SAMPLE = ClaimPrediction(
-    rejection_probability=0.72,
+    rejection_probability=0.67,
     risk_band="high",
     carc_code="197",
-    carc_description="Precertification/authorization/notification/pre-treatment absent.",
+    carc_reason="Pre-authorisation was required for this procedure but was not obtained.",
+    staff_action="Obtain written pre-authorisation from the insurer and attach it before submitting.",
     flagged_fields=[
         FlaggedField(
             label="Pre-authorisation",
-            value="Not obtained",
+            value="No, not obtained",
             effect="increases_risk",
-            contribution_points=31.4,
+            contribution_points=40.7,
         ),
         FlaggedField(
-            label="Days since treatment",
-            value="46 days",
+            label="Claim amount",
+            value="PKR 85,000",
             effect="increases_risk",
-            contribution_points=12.1,
-        ),
-        FlaggedField(
-            label="Documents complete",
-            value="Yes",
-            effect="reduces_risk",
-            contribution_points=-6.8,
+            contribution_points=4.2,
         ),
     ],
+    issues=["Needed for minor surgery or endoscopy at any price, and not obtained."],
 )
 
 
@@ -107,12 +104,13 @@ def main() -> int:
     print(f"      model    : {result.model or '-'}")
     print(f"      text     : {result.text}")
     if result.source == "fallback":
-        print("      WARN: fell back to the template — Qwen call did not succeed.")
+        print("      WARN: fell back to the template — the call failed, or its reply broke a")
+        print("            rule and was rejected (the log line above says which).")
         return 1
     print("      PASS")
 
     print("\n" + "=" * 62)
-    print("All checks passed. Qwen is ready to wire into the adaptive flow.")
+    print("All checks passed. Qwen will narrate results in the live app.")
     print("=" * 62)
     return 0
 

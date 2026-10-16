@@ -1,4 +1,4 @@
-"""Phase 4 — the adaptive question engine.
+"""The adaptive question engine.
 
 After every answer we ask whichever unanswered field would most reduce our uncertainty
 about this claim. The quantity is the mutual information between the rejection outcome
@@ -16,21 +16,22 @@ might have been. Using the model's unknown-prediction as the baseline produces n
 model scoring the most negative. Marginalising per feature makes the quantity a true
 mutual information: non-negative by concavity of entropy, and comparable across fields.
 
-For each candidate value of each unanswered field we predict the probability the claim
-would have if that were the answer, weight it by how often that value occurs, and keep
-the field whose answers would move us furthest from maximum uncertainty.
-
 This is genuinely information-theoretic rather than a fixed question order ranked by
-global feature importance: because every p_given_f=v is conditioned on the answers
-already given, the ranking changes as the conversation proceeds, and two different
-claims get asked different questions in a different order.
+global feature importance: because every p_v is conditioned on the answers already
+given, the ranking changes as the conversation proceeds, and two different claims get
+asked different questions in a different order.
 
-Cost is roughly 150 predictions per question, batched into a single LightGBM call.
+The procedure and the amount come from the bill, entered before the first question (see
+ml/features.py), so from the first question on the ranking is specific to this claim.
+They also settle whether pre-authorisation was required. Where it was not, the answer is
+implied and never asked. Where it was, it is always the first question, with only
+"obtained" and "not obtained" on offer: offering "not required" for a procedure that
+requires it let the costliest real mistake score as safely as having approval, and no
+claim that needed approval can be cleared without the tool having asked about it.
 
-Known approximation: P(f = v) uses the marginal training frequency rather than the
-posterior conditioned on answers so far. Modelling the joint distribution over answers
-would be a far larger build for a demo, and the marginal is a standard, defensible
-stand-in. It is stated here rather than hidden.
+Known approximation: P(f = v) uses training frequencies rather than a posterior
+conditioned on every answer so far; pre-authorisation uses its frequency among claims
+that required it. Modelling the full joint distribution would be a far larger build.
 """
 
 from __future__ import annotations
@@ -41,16 +42,14 @@ from typing import Literal
 import numpy as np
 
 from backend.predictor import Predictor, get_predictor
-from ml.features import ASKABLE_FEATURES
+from ml.features import ASKABLE_FEATURES, BOOLEAN_FEATURES, CATEGORICAL_FEATURES, TIER_EXCLUSIONS
 
 MIN_QUESTIONS = 3      # never present a verdict before this many answers
 MAX_QUESTIONS = 8      # hard cap, guarantees termination
-MIN_INFO_GAIN = 0.006  # below this, further questions are not earning their keep
-
-# MIN_INFO_GAIN, and the risk bands in metadata.json, were calibrated together by
-# simulating the loop over held-out claims (see tests/test_adaptive.py). At 0.03 the loop
-# stops before asking anything; at 0.004 with the original bands it ran to the cap on most
-# claims. These values give clean claims a ~3-question path and risky ones ~4.
+# Below this expected gain (bits) a further question is not earning its keep. The value
+# actually used is fitted with the bands on validation and read from metadata.json; this
+# is the fallback for artefacts that predate that.
+MIN_INFO_GAIN = 0.006
 
 VALUE_LABELS: dict[str, dict] = {
     "procedure_category": {
@@ -95,30 +94,24 @@ VALUE_LABELS: dict[str, dict] = {
 }
 
 QUESTION_TEXT: dict[str, tuple[str, str]] = {
-    "procedure_category":        ("What kind of procedure was performed?",
-                                  "Pick the closest category to what was billed."),
     "diagnosis_category":        ("What was the main diagnosis?",
                                   "The condition recorded on the case notes."),
     "insurer_tpa":               ("Which insurer or TPA is this claim going to?",
                                   "Filing deadlines and tariffs differ by insurer."),
     "plan_tier":                 ("What plan tier is the patient on?",
                                   "Lower tiers exclude more procedures."),
-    "pre_auth_obtained":         ("Was pre-authorisation obtained?",
+    "pre_auth_obtained":         ("This claim needs pre-authorisation. Was it obtained?",
                                   "Missing pre-authorisation is the single most common avoidable rejection."),
     "documents_complete":        ("Are the supporting documents complete?",
                                   "Prescriptions, reports, discharge notes and the itemised bill."),
     "days_since_treatment":      ("How many days ago was the treatment?",
                                   "Insurers reject claims filed after their deadline."),
-    "claim_amount_pkr":          ("What is the total claim amount, in PKR?",
-                                  "Amounts well above the usual rate for a procedure get queried."),
     "provider_network_status":   ("Is your clinic on this insurer's panel?",
                                   "Off-panel claims often have to go to a different payer."),
     "patient_policy_active":     ("Was the patient's policy active on the treatment date?",
                                   "Cover that had lapsed is an automatic rejection."),
     "is_emergency":              ("Was this an emergency or urgent care visit?",
-                                  "Emergencies are held to different pre-authorisation rules."),
-    "diagnosis_procedure_match": ("Does the recorded diagnosis clearly justify the procedure billed?",
-                                  "Insurers check that the treatment fits the diagnosis."),
+                                  "Insurers give emergency care more leeway on pre-authorisation."),
     "is_duplicate_submission":   ("Has a claim for this same treatment already been submitted?",
                                   "Duplicates are rejected outright."),
     "prior_claims_30d":          ("How many other claims has this patient filed in the last 30 days?",
@@ -128,12 +121,21 @@ QUESTION_TEXT: dict[str, tuple[str, str]] = {
 BOOLEAN_LABELS: dict[str, tuple[str, str]] = {
     "patient_policy_active":     ("Yes, active", "No, lapsed"),
     "is_emergency":              ("Yes", "No"),
-    "diagnosis_procedure_match": ("Yes, it matches", "No, there's a mismatch"),
     "is_duplicate_submission":   ("Yes, already submitted", "No, first submission"),
 }
 
 NUMBER_UNITS = {"days_since_treatment": "days", "claim_amount_pkr": "PKR",
                 "prior_claims_30d": "claims"}
+
+# Accepted ranges for typed answers (inclusive). Anything outside is refused rather than
+# fed to the model, which would treat a nonsense value as if it were real.
+NUMBER_LIMITS: dict[str, tuple[int, int]] = {
+    "days_since_treatment": (0, 365),
+    "claim_amount_pkr": (100, 5_000_000),
+    "prior_claims_30d": (0, 30),
+    "patient_age": (0, 110),
+}
+NUMBER_UNITS["patient_age"] = "years"
 
 
 @dataclass
@@ -150,6 +152,8 @@ class Question:
     kind: Literal["choice", "number"]
     options: list[Option] = field(default_factory=list)
     unit: str | None = None
+    min_value: int | None = None
+    max_value: int | None = None
     expected_info_gain: float = 0.0
 
 
@@ -163,26 +167,84 @@ class Step:
     stop_reason: str | None = None
 
 
+@dataclass
+class TrajectoryStep:
+    """One point on a claim's path through the loop, ignoring band-based stopping."""
+
+    n_answered: int
+    probability: float
+    best_feature: str | None
+    best_gain: float | None
+
+
 def _entropy(p: np.ndarray | float) -> np.ndarray | float:
     p = np.clip(p, 1e-9, 1 - 1e-9)
     return -(p * np.log2(p) + (1 - p) * np.log2(1 - p))
+
+
+def stop_reason(n_answered: int, band: str, best_gain: float | None,
+                min_gain: float = MIN_INFO_GAIN) -> str | None:
+    """Why the loop stops here, or None to keep asking.
+
+    The live loop and the band-tuning simulation both call this, so the bands chosen in
+    training are chosen for exactly the stopping behaviour users get.
+    """
+    if n_answered >= MAX_QUESTIONS:
+        return "question_limit_reached"
+    if n_answered >= MIN_QUESTIONS and band != "medium":
+        return f"confident_{band}_risk"
+    if best_gain is None:
+        return "all_questions_answered"
+    if n_answered >= MIN_QUESTIONS and best_gain < min_gain:
+        return "no_informative_questions_left"
+    return None
+
+
+def n_answered(answers: dict) -> int:
+    return sum(1 for f in ASKABLE_FEATURES if answers.get(f) is not None)
 
 
 class AdaptiveEngine:
     def __init__(self, predictor: Predictor | None = None):
         self.p = predictor or get_predictor()
         self.priors = self.p.meta["value_priors"]
+        self.min_gain = self.p.meta.get("loop", {}).get("min_info_gain", MIN_INFO_GAIN)
+
+    # -- what can be asked ----------------------------------------------------
+
+    def candidates(self, answers: dict, derived: dict | None = None) -> list[str]:
+        """Unanswered fields that can be asked now.
+
+        Pre-authorisation waits until the tool knows it was required. Until then its
+        answer has no fixed meaning; once it is known not to be required, the answer
+        is implied and asking would only invite a contradiction.
+        """
+        derived = derived if derived is not None else self.p.derived(answers)
+        out = []
+        for f in ASKABLE_FEATURES:
+            if answers.get(f) is not None:
+                continue
+            if f == "pre_auth_obtained" and derived.get("pre_auth_required_for_procedure") != 1:
+                continue
+            out.append(f)
+        return out
+
+    def candidate_values(self, feature: str) -> tuple[list, np.ndarray]:
+        prior = self.priors[feature]
+        w = np.asarray(prior["probs"], dtype=float)
+        return list(prior["values"]), w / w.sum()
 
     # -- question construction ---------------------------------------------
 
-    def _build_question(self, feature: str, gain: float) -> Question:
-        text, help_text = QUESTION_TEXT[feature]
-        prior = self.priors[feature]
-        kind = prior["kind"]
+    def _build_question(self, feature: str, gain: float, answers: dict) -> Question:
+        text, help_text = question_text(feature, answers, self.p.ref)
+        kind = self.priors[feature]["kind"]
 
         if kind == "numeric":
+            lo, hi = NUMBER_LIMITS[feature]
             return Question(feature, text, help_text, "number",
-                            unit=NUMBER_UNITS.get(feature), expected_info_gain=gain)
+                            unit=NUMBER_UNITS.get(feature), min_value=lo, max_value=hi,
+                            expected_info_gain=gain)
 
         if kind == "boolean":
             yes, no = BOOLEAN_LABELS[feature]
@@ -191,35 +253,33 @@ class AdaptiveEngine:
                             expected_info_gain=gain)
 
         labels = VALUE_LABELS.get(feature, {})
-        opts = [Option(v, labels.get(v, v)) for v in prior["values"]]
+        values, _ = self.candidate_values(feature)
+        opts = [Option(v, labels.get(v, v)) for v in values]
         return Question(feature, text, help_text, "choice", options=opts,
                         expected_info_gain=gain)
 
     # -- information gain ---------------------------------------------------
 
-    def information_gains(self, answers: dict) -> dict[str, float]:
-        """Expected entropy reduction for every unanswered askable field."""
-        unanswered = [f for f in ASKABLE_FEATURES if answers.get(f) is None]
-        if not unanswered:
+    def information_gains(self, answers: dict, derived: dict | None = None) -> dict[str, float]:
+        """Expected entropy reduction for every field that can be asked now."""
+        fields = self.candidates(answers, derived)
+        if not fields:
             return {}
 
         # One batched prediction across every (field, candidate value) pair.
         trials: list[dict] = []
-        spans: list[tuple[str, int, int, list[float]]] = []
-        for feat in unanswered:
-            prior = self.priors[feat]
+        spans: list[tuple[str, int, int, np.ndarray]] = []
+        for feat in fields:
+            values, weights = self.candidate_values(feat)
             start = len(trials)
-            for v in prior["values"]:
-                trials.append({**answers, feat: v})
-            spans.append((feat, start, len(trials), prior["probs"]))
+            trials.extend({**answers, feat: v} for v in values)
+            spans.append((feat, start, len(trials), weights))
 
         probs = self.p.predict_many(trials)
         entropies = _entropy(probs)
 
         gains: dict[str, float] = {}
-        for feat, start, end, weights in spans:
-            w = np.asarray(weights, dtype=float)
-            w = w / w.sum()
+        for feat, start, end, w in spans:
             p_marginal = float(np.dot(w, probs[start:end]))
             expected_h = float(np.dot(w, entropies[start:end]))
             gains[feat] = float(_entropy(p_marginal)) - expected_h
@@ -229,33 +289,125 @@ class AdaptiveEngine:
 
     def next_step(self, answers: dict) -> Step:
         answers = {k: v for k, v in answers.items() if v is not None}
-        n_answered = sum(1 for f in ASKABLE_FEATURES if answers.get(f) is not None)
+        n = n_answered(answers)
         p = self.p.predict(answers)
         band = self.p.risk_band(p)
 
-        def stop(reason: str) -> Step:
-            return Step(True, p, band, n_answered, None, reason)
-
-        if n_answered >= MAX_QUESTIONS:
-            return stop("question_limit_reached")
+        # Stopping on the cap or on confidence needs no information gains, so they are
+        # only computed when a question might actually be asked.
+        early = stop_reason(n, band, best_gain=0.0, min_gain=self.min_gain)
+        if early in ("question_limit_reached", f"confident_{band}_risk"):
+            return Step(True, p, band, n, None, early)
 
         gains = self.information_gains(answers)
+        best = self.choose(gains)
+        reason = stop_reason(n, band, gains[best] if best else None, self.min_gain)
+        if reason:
+            return Step(True, p, band, n, None, reason)
+        return Step(False, p, band, n, self._build_question(best, gains[best], answers))
+
+    @staticmethod
+    def choose(gains: dict[str, float]) -> str | None:
+        """The next question: pre-authorisation first whenever it is open, since a claim
+        that needed approval must never be cleared without it; otherwise the field with
+        the highest expected information gain."""
         if not gains:
-            return stop("all_questions_answered")
+            return None
+        if "pre_auth_obtained" in gains:
+            return "pre_auth_obtained"
+        return max(gains, key=gains.get)
 
-        best_feature = max(gains, key=gains.get)
-        best_gain = gains[best_feature]
+    def trajectory(self, truth: dict, context: dict) -> tuple[list[TrajectoryStep], list[str]]:
+        """Walk a claim through the loop answering from `truth`, never stopping on the
+        bands, so one walk can be scored under any band setting (see ml/simulate.py)."""
+        answers = dict(context)
+        steps: list[TrajectoryStep] = []
+        order: list[str] = []
+        while True:
+            n = n_answered(answers)
+            p = self.p.predict(answers)
+            gains = self.information_gains(answers) if n < MAX_QUESTIONS else {}
+            best = self.choose(gains)
+            steps.append(TrajectoryStep(n, p, best, gains[best] if best else None))
+            if best is None:
+                return steps, order
+            answers[best] = truth[best]
+            order.append(best)
 
-        # Confident enough to stop early — but only after a minimum number of answers,
-        # so we never present a verdict built on almost nothing.
-        if n_answered >= MIN_QUESTIONS and band != "medium":
-            return stop(f"confident_{band}_risk")
 
-        if best_gain < MIN_INFO_GAIN:
-            return stop("no_informative_questions_left")
+def question_text(feature: str, answers: dict, ref: dict) -> tuple[str, str]:
+    """The question and its help line, worded for what is already known about the claim."""
+    text, help_text = QUESTION_TEXT[feature]
+    insurer = answers.get("insurer_tpa")
+    if feature == "pre_auth_obtained":
+        help_text = pre_auth_reason(answers, ref)
+    elif feature == "provider_network_status":
+        text = (f"Is your clinic on {insurer}'s panel?" if insurer
+                else "Is your clinic on the panel of the insurer this claim goes to?")
+    elif feature == "days_since_treatment" and insurer:
+        limit = ref["insurer_filing_limit_days"].get(insurer)
+        if limit:
+            help_text = f"{insurer} rejects claims filed more than {limit} days after treatment."
+    elif feature == "plan_tier":
+        proc = answers.get("procedure_category")
+        if any(proc in excluded for excluded in TIER_EXCLUSIONS.values()):
+            help_text = f"Some plans do not cover {value_label('procedure_category', proc).lower()} at all."
+    return text, help_text
 
-        return Step(False, p, band, n_answered,
-                    self._build_question(best_feature, best_gain))
+
+def pre_auth_reason(answers: dict, ref: dict) -> str:
+    """Why this claim needs pre-authorisation, in the clerk's terms."""
+    proc = answers.get("procedure_category")
+    amount = answers.get("claim_amount_pkr")
+    if proc in ref["pre_auth_categories"]:
+        why = f"{value_label('procedure_category', proc)} needs insurer approval before treatment, whatever it costs."
+    elif amount is not None and amount > ref["pre_auth_amount_threshold_pkr"]:
+        why = (f"Claims above PKR {ref['pre_auth_amount_threshold_pkr']:,} need insurer "
+               "approval before treatment.")
+    else:
+        why = "This claim needs insurer approval before treatment."
+    if answers.get("is_emergency") is True:
+        why += " Emergencies get some leeway, but most insurers still expect it."
+    return why
+
+
+# ---------------------------------------------------------------------------
+# Answer validation — every value is checked against what the model was trained on
+# before it reaches the session, so nothing unknown is silently scored as "unknown".
+# ---------------------------------------------------------------------------
+
+class InvalidAnswer(ValueError):
+    pass
+
+
+def validate_answer(feature: str, value: object, predictor: Predictor) -> object:
+    """Return the value in canonical form, or raise InvalidAnswer with a message a clerk
+    can act on. Covers the intake's patient and bill fields as well as the questions."""
+    label = feature_label(feature)
+
+    if feature in BOOLEAN_FEATURES:
+        if not isinstance(value, bool):
+            raise InvalidAnswer(f"{label} must be answered yes or no.")
+        return value
+
+    if feature in NUMBER_LIMITS:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise InvalidAnswer(f"{label} must be a whole number.")
+        if isinstance(value, float) and not value.is_integer():
+            raise InvalidAnswer(f"{label} must be a whole number.")
+        lo, hi = NUMBER_LIMITS[feature]
+        if not lo <= value <= hi:
+            unit = NUMBER_UNITS.get(feature, "")
+            raise InvalidAnswer(f"{label} must be between {lo:,} and {hi:,} {unit}.".rstrip(" ."))
+        return int(value)
+
+    if feature not in CATEGORICAL_FEATURES:
+        raise InvalidAnswer(f"{label} cannot be answered here.")
+    allowed = (["yes", "no"] if feature == "pre_auth_obtained"
+               else predictor.categories[feature])
+    if not isinstance(value, str) or value not in allowed:
+        raise InvalidAnswer(f"{label}: that is not one of the listed options.")
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -274,7 +426,6 @@ FEATURE_LABELS: dict[str, str] = {
     "provider_network_status": "Panel status",
     "patient_policy_active": "Policy status",
     "is_emergency": "Emergency visit",
-    "diagnosis_procedure_match": "Diagnosis matches procedure",
     "is_duplicate_submission": "Duplicate submission",
     "prior_claims_30d": "Claims in last 30 days",
     "patient_age": "Patient age",
@@ -283,6 +434,8 @@ FEATURE_LABELS: dict[str, str] = {
     "amount_vs_procedure_median": "Amount vs typical for procedure",
     "days_vs_insurer_filing_limit": "Share of filing window used",
     "insurer_filing_limit_days": "Insurer filing limit",
+    "diagnosis_procedure_match": "Diagnosis fits procedure",
+    "procedure_patient_conflict": "Procedure fits patient",
 }
 
 
@@ -291,19 +444,22 @@ def feature_label(feature: str) -> str:
 
 
 def value_label(feature: str, value: object) -> str:
-    """Human-readable rendering of one answer."""
+    """Human-readable rendering of one answer. Only ever sees validated values."""
     if value is None:
         return "Not answered"
     if feature in VALUE_LABELS:
         return VALUE_LABELS[feature].get(value, str(value))
     if feature in BOOLEAN_LABELS:
         return BOOLEAN_LABELS[feature][0 if value else 1]
+    if feature == "patient_gender":
+        return {"M": "Male", "F": "Female"}.get(value, str(value))
     if isinstance(value, bool):
         return "Yes" if value else "No"
     if feature == "claim_amount_pkr":
         return f"PKR {int(value):,}"
     if feature == "days_since_treatment":
-        return f"{int(value)} days"
+        n = int(value)
+        return f"{n} day{'s' if n != 1 else ''}"
     if feature == "prior_claims_30d":
         n = int(value)
         return "None" if n == 0 else f"{n} claim{'s' if n > 1 else ''}"
@@ -312,3 +468,4 @@ def value_label(feature: str, value: object) -> str:
     if isinstance(value, float):
         return f"{value:.2f}"
     return str(value)
+
