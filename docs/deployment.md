@@ -1,49 +1,53 @@
 # Deployment — Alibaba Cloud
 
-> **Status: prepared, not executed.** The container definitions and the runbook below are
-> written and the standalone Next.js build is verified, but Docker is not installed on the
-> development machine, so **the images have not been built or run**. Budget an hour for the
-> first build to shake out problems, and do it before demo day, not on it.
+> **Status: prepared, not executed.** Docker is not installed on the development machine,
+> so the images have not been built here. What *has* been verified: the backend
+> Dockerfile's steps replayed in a clean directory (exact `uv.lock` install, the test
+> stage passing on exactly the files the image copies), and the frontend's standalone
+> server running with `API_URL` read at runtime and proxying `/api`. Budget an hour for
+> the first real `docker compose build` before demo day, not on it.
 
 ## What gets deployed
 
-Two containers. The API trains its own models during the image build (about two minutes),
-so no model artefacts need to be shipped or stored.
+Two containers on one private network. Only the web app is ever exposed; the API is
+reached through the web app's own `/api` route, so the browser sees a single origin and
+there is no CORS to configure.
 
-| | Image | Port |
-|---|---|---|
-| API | `Dockerfile` (repo root) — FastAPI + LightGBM + trained models | 8000 |
-| Web | `frontend/Dockerfile` — Next.js standalone | 3000 |
+| | Image | Listens | Exposed |
+|---|---|---|---|
+| API | `Dockerfile` (repo root) — FastAPI + the committed models, non-root | 8000 | `127.0.0.1` only |
+| Web | `frontend/Dockerfile` — Next.js standalone, non-root | 3000 | `127.0.0.1`, behind nginx |
+
+The API image ships the committed artefacts in `models/` — it does not download Synthea
+or retrain at build time, so what is deployed is exactly what was evaluated. The test
+suite runs as a build stage; a failing test fails the build.
 
 **Before anything else:** confirm the current submission requirements from the official
-hackathon rulebook. Whether a public URL is mandatory, and which Alibaba services qualify,
-decides how much of the below you actually need.
+hackathon rulebook. Whether a public URL is mandatory decides how much of this you need.
 
 ## Local check first
 
 ```bash
+cp .env.example .env              # fill in the DashScope values
 docker compose --env-file .env up --build
 ```
 
-`http://localhost:3000` should behave exactly as `npm run dev` does. If it does not, fix it
-here rather than on the server.
-
-Note `PUBLIC_API_URL`: Next.js inlines `NEXT_PUBLIC_*` **at build time**, so the browser-facing
-API URL is baked into the image. Locally `http://localhost:8000` is right; on a server it must
-be the address a visitor's browser can reach, not an internal one.
+<http://localhost:3000> should behave exactly as `npm run dev` does. The correction log
+lives on the `feedback` volume and survives `docker compose down` / `up`.
 
 ## ECS
 
-A single instance is enough. `ecs.e-c1m1.large` (2 vCPU, 4 GB) or larger — LightGBM training
-during the build wants the memory.
+A single small instance is enough now that nothing trains at build time:
+`ecs.e-c1m1.large` (2 vCPU, 2 GB) is comfortable.
 
 ```bash
-# 1. Instance: Ubuntu 22.04, security group open on 22, 80 (and 443 with a domain).
+# 1. Instance: Ubuntu 22.04. Security group: 22 from your IP only; 80 and 443 public.
 ssh root@<elastic-ip>
 
-# 2. Docker
+# 2. Docker and nginx
 curl -fsSL https://get.docker.com | sh
 systemctl enable --now docker
+apt-get install -y nginx certbot python3-certbot-nginx
 
 # 3. Code
 git clone https://github.com/mirza-ahsan/tasdeeq-e-bima.git
@@ -55,58 +59,85 @@ DASHSCOPE_API_KEY=...
 DASHSCOPE_BASE_URL=https://ws-<workspace>.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1
 DASHSCOPE_WORKSPACE_ID=ws-<workspace>
 QWEN_MODEL=qwen-plus
-PUBLIC_API_URL=http://<elastic-ip>:8000
 EOF
 chmod 600 .env
 
-# 5. Build and run
+# 5. Build and run (both ports bind to 127.0.0.1; nginx is the only public door)
 docker compose --env-file .env up -d --build
-docker compose logs -f api        # watch the training step complete
-curl -s localhost:8000/api/health
+curl -s localhost:3000/api/health     # through the web app's proxy
 ```
 
-Choosing a region close to your DashScope endpoint (Singapore, for the workspace-scoped URL
-in `.env.example`) keeps the Qwen round-trip fast enough not to be noticeable on stage.
+Choose a region close to your DashScope endpoint (Singapore, for the workspace-scoped URL
+in `.env.example`) so the Qwen round-trip is not noticeable on stage.
 
-## Nginx
+## Nginx and TLS
 
-Serving both on port 80 avoids the mixed-port URL and is worth the ten minutes.
+One origin, one upstream: the web app serves the page and proxies `/api` itself.
 
 ```nginx
+limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+
 server {
     listen 80;
-    server_name _;
+    server_name claimcheck.example.com;
 
     location /api/ {
-        proxy_pass http://127.0.0.1:8000;
+        limit_req zone=api burst=20 nodelay;
+        proxy_pass http://127.0.0.1:3000;
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_read_timeout 60s;          # Qwen calls can take a few seconds
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_read_timeout 60s;
     }
 
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
     }
 }
 ```
 
-With this in place set `PUBLIC_API_URL=http://<elastic-ip>` (no port) and rebuild the web
-image — the API URL is compiled in, so changing it means a rebuild, not a restart.
+`X-Forwarded-For` is *set* to the connecting address rather than appended to, so a
+visitor cannot choose their own rate-limit key. Then add TLS:
+
+```bash
+certbot --nginx -d claimcheck.example.com    # rewrites the server block for 443 + redirect
+```
+
+The timeouts nest: Qwen gets 8 s plus one retry inside the API, the web proxy waits 30 s,
+nginx 60 s — so a stalled Qwen call ends in the template fallback, never a 504.
+
+## Abuse limits already in the app
+
+- Starting a check is limited to 30 per minute per client (the API, keyed on the address
+  the proxy forwards; `TRUST_PROXY_HEADERS=true` in compose).
+- Sessions are capped at 500 and expire after 30 idle minutes.
+- A result is computed once per state of a claim; viewing it again never calls Qwen.
+- Qwen calls are capped at 30 per minute across all users; past that, the template is used.
+- `/api/health` reports only whether models loaded and whether Qwen is configured — not
+  the endpoint, workspace or session count.
+
+## Before real patient data
+
+This deployment is for synthetic data. Before a partner clinic's real claims touch it:
+
+- **Feedback log.** It stores each corrected claim's answers. It needs encryption at rest,
+  access control, and a retention period (for example 90 days, then delete). Mount the
+  volume on encrypted storage.
+- **Third-party processing.** Field labels and values (procedure type, amount, policy
+  status) are sent to Alibaba Cloud DashScope to be worded. That needs a data-processing
+  agreement, a deliberate region choice, and a line in the clinic's patient notice — or
+  `DASHSCOPE_API_KEY` left unset, which keeps everything on the server via the template.
+- **Auth.** There is none. Put the app behind the clinic's login or an authenticating
+  proxy before it holds anything real.
 
 ## Things that will bite
 
-- **CORS.** `backend/main.py` allows only `localhost:3000`. Add the deployed origin, or
-  serve both behind one nginx origin as above, in which case no change is needed.
-- **`NEXT_PUBLIC_API_URL` is build-time.** Changing it requires `--build`.
-- **First build is slow.** It downloads Synthea and trains two models. Later builds reuse
-  the layer unless `ml/` or `data/carc_codes.json` changed.
-- **Memory.** Training inside the container is the peak. A 2 GB instance may OOM.
-- **`.env` on the server only.** `.gitignore` and `.dockerignore` both exclude it; keep it
-  that way and inject at runtime.
-- **Feedback SQLite is inside the container.** It is wiped on redeploy. That is fine for a
-  demo; mount a volume if you want the log to survive.
+- **First build downloads fonts and npm packages.** The build machine needs internet.
+- **`.env` on the server only.** `.gitignore` and both `.dockerignore` files exclude it.
+- **Sessions are in memory.** Run one API process (the default); more than one worker
+  would split sessions between them.
+- **Moving the API** is a change to `API_URL` and a restart of `web`, not a rebuild.
 
 ## Rollback
 
