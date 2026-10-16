@@ -339,6 +339,7 @@
   },
   "carc_classes": [
     "6",
+    "7",
     "11",
     "16",
     "18",
@@ -504,7 +505,7 @@
   "loop": {
     "min_questions": 3,
     "max_questions": 8,
-    "min_info_gain": 0.001
+    "min_info_gain": 0.0
   },
   "band_tuning": {
     "constraints": {
@@ -523,14 +524,14 @@
       "claims": 361,
       "bands": {
         "low": {
-          "claims": 242,
-          "share": 0.6704,
-          "rejection_rate": 0.1116
+          "claims": 244,
+          "share": 0.6759,
+          "rejection_rate": 0.1107
         },
         "medium": {
-          "claims": 30,
-          "share": 0.0831,
-          "rejection_rate": 0.3
+          "claims": 28,
+          "share": 0.0776,
+          "rejection_rate": 0.3214
         },
         "high": {
           "claims": 89,
@@ -540,11 +541,12 @@
       },
       "rejections_flagged": 0.6824,
       "rejections_in_high_band": 0.5765,
-      "mean_questions_approved": 3.32,
-      "mean_questions_rejected": 3.38,
+      "mean_questions": 3.46,
+      "mean_questions_approved": 3.43,
+      "mean_questions_rejected": 3.55,
       "share_at_minimum": 0.8947,
-      "share_at_cap": 0.0111,
-      "distinct_question_orders": 53
+      "share_at_cap": 0.0803,
+      "distinct_question_orders": 52
     }
   },
   "metrics": {
@@ -559,25 +561,25 @@
     "test_f1": 0.6452,
     "majority_class_baseline": 0.7624,
     "test_claims": 362,
-    "carc_top1": 0.8811,
-    "carc_top3": 0.993,
-    "carc_test_claims": 143,
-    "carc_training_claims": 711,
-    "carc_model_trees": 64,
+    "carc_top1": 0.8312,
+    "carc_top3": 0.974,
+    "carc_test_claims": 77,
+    "carc_training_claims": 563,
+    "carc_model_trees": 75,
     "risk_model_trees": 101
   },
   "product_test": {
     "claims": 362,
     "bands": {
       "low": {
-        "claims": 225,
-        "share": 0.6215,
-        "rejection_rate": 0.1067
+        "claims": 228,
+        "share": 0.6298,
+        "rejection_rate": 0.1053
       },
       "medium": {
-        "claims": 42,
-        "share": 0.116,
-        "rejection_rate": 0.2143
+        "claims": 39,
+        "share": 0.1077,
+        "rejection_rate": 0.2308
       },
       "high": {
         "claims": 95,
@@ -587,10 +589,11 @@
     },
     "rejections_flagged": 0.7209,
     "rejections_in_high_band": 0.6163,
-    "mean_questions_approved": 3.39,
-    "mean_questions_rejected": 3.55,
+    "mean_questions": 3.62,
+    "mean_questions_approved": 3.6,
+    "mean_questions_rejected": 3.66,
     "share_at_minimum": 0.8702,
-    "share_at_cap": 0.0166,
-    "distinct_question_orders": 52
+    "share_at_cap": 0.1133,
+    "distinct_question_orders": 55
   }
 }
