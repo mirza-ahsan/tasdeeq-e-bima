@@ -28,6 +28,11 @@ backend/services/explain_qwen.py  Qwen prompt, output validator, call budget, fa
 models/               committed artefacts + metadata.json (metrics, priors, bands, loop)
 data/processed/claims.parquet     committed labelled dataset (tests and evaluation use it)
 frontend/             Next.js 16 App Router + Tailwind v4 (see frontend/AGENTS.md)
+frontend/app/page.tsx state machine: landing -> intake -> check -> verdict; demo autoplay
+frontend/app/api/[...path]/route.ts  same-origin proxy to API_URL (read at request time)
+frontend/components/  RiskPanel, Trajectory, Waterfall, Ledger, Checks, QuestionCard, ...
+docs/build_deck.py    deck built from models/metadata.json + docs/screenshots/
+scripts/              fetch_synthea, check_drift (CI gate), screenshots, test_dashscope
 ```
 
 ## Commands
@@ -39,7 +44,7 @@ uv run pytest -q -m live                  # one real DashScope call (needs .env)
 uv run uvicorn backend.main:app --reload --port 8000
 uv run python scripts/test_dashscope.py   # Qwen end-to-end check before a demo
 cd frontend && npm ci && npm run dev      # UI on :3000, proxies /api to API_URL (:8000)
-cd frontend && npx tsc --noEmit && npm run lint
+cd frontend && npm run typecheck && npm run lint && npm test   # typecheck runs next typegen first
 uvx ruff@0.14.0 check backend ml tests scripts --select F,E9
 ```
 
@@ -52,9 +57,11 @@ uv run python ml/train.py                 # ~3 min; prints test + verdict metric
 uv run python ml/evaluate.py              # rewrites docs/model-card.md, checks metadata
 ```
 
-After retraining, every number in README.md, docs/*.md and docs/build_deck.py must be
-updated from `models/metadata.json` / `docs/model-card.md`, and the demo claims in
-`backend/demo_claims.py` re-checked (tests/test_adaptive.py pins their behaviour).
+After retraining: re-run `ml/evaluate.py`; update the figures in README.md, docs/*.md and
+IMPLEMENTATION_PLAN.md from `models/metadata.json`; re-check the demo claims in
+`backend/demo_claims.py` (tests pin their behaviour); then, with the app running,
+`uv run --with playwright python scripts/screenshots.py --url <prod build>` and
+`uv run --extra deck python docs/build_deck.py` (the deck reads metadata itself).
 
 ## Conventions
 
@@ -80,6 +87,15 @@ updated from `models/metadata.json` / `docs/model-card.md`, and the demo claims 
    once. Bands must straddle the base rate, keep "low" ≥ 85% approved and "high" ≥ 50%
    rejected (ml/simulate.py). Every published figure must match metadata.json.
 6. **The demo survives a dead network** via the template fallback.
+
+## Frontend design rules
+
+- Colour has four meanings only: brand (actions/focus), verdict bands (always icon + label),
+  attribution polarity (`--up` raises / `--down` lowers), and nothing else. Text never
+  wears a data colour. Tokens live in `app/globals.css`, light and dark both validated.
+- A band word is a verdict: below `min_questions` the panel shows "Early estimate".
+- Every number on screen comes from the API; never hardcode bands, limits or metrics.
+- Check layouts at 390px and 1440px, light and dark — `scrollWidth` must equal the viewport.
 
 ## Gotchas
 
