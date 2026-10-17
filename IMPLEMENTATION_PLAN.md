@@ -485,6 +485,19 @@ headers; frontend unit tests.
 - **Band tuning gamed its own objective** — a "low" band ending above the average claim's risk.
   Bands must now straddle the base rate, and a typical claim must read "medium" for every patient.
 
+**Independent reviews.** Each major piece of work was reviewed by a fresh agent in an
+isolated worktree that rebuilt, ran and attacked it. The ML/API review confirmed the rebuild is
+byte-identical and the loop simulation matches the live API on all 723 held-out claims, and
+found: a spoofable X-Forwarded-For that let one client evict everyone's sessions; reasons named
+for defects never asked about (12% of non-low verdicts) and "ready to submit" printed beside a
+failed rule check; validator gaps (band words, code numbers, sentence count); NaN/Infinity
+giving 500s and 422s echoing input; obstetric care for men labelled CARC 6 (age) instead of 7
+(gender); the reason model trained on claims in the risk test split. The frontend review found
+a check stranded when the verdict fetch failed, autoplay restarting itself after an edit,
+global letter shortcuts answering from the wrong control, lost focus, tooltips that closed on
+tap, number fields that read "1500.00" as 150,000, and edits plotted as new questions. All are
+fixed and pinned by tests (74 Python, 12 frontend) or a browser replay of the reproduction.
+
 **Final metrics** (test split, 362 claims)
 
 | | |
