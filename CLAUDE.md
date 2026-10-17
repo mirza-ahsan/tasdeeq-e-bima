@@ -32,6 +32,7 @@ frontend/app/page.tsx state machine: landing -> intake -> check -> verdict; demo
 frontend/app/api/[...path]/route.ts  same-origin proxy to API_URL (read at request time)
 frontend/components/  RiskPanel, Trajectory, Waterfall, Ledger, Checks, QuestionCard, ...
 docs/build_deck.py    deck built from models/metadata.json + docs/screenshots/
+docs/build_pitch.py   stage pitch (docs/pitch.pdf): business case first, outside figures cited
 scripts/              fetch_synthea, check_drift (CI gate), screenshots, test_dashscope
 ```
 
@@ -61,7 +62,8 @@ After retraining: re-run `ml/evaluate.py`; update the figures in README.md, docs
 IMPLEMENTATION_PLAN.md from `models/metadata.json`; re-check the demo claims in
 `backend/demo_claims.py` (tests pin their behaviour); then, with the app running,
 `uv run --with playwright python scripts/screenshots.py --url <prod build>` and
-`uv run --extra deck python docs/build_deck.py` (the deck reads metadata itself).
+`uv run --extra deck python docs/build_deck.py` and `uv run python docs/build_pitch.py`
+(both decks read metadata themselves).
 
 ## Conventions
 
