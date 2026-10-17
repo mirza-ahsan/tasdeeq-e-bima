@@ -30,8 +30,6 @@ SOURCES = [
     ("Becker’s Hospital Review, on the Change Healthcare 2020 Revenue Cycle Denials Index "
      "(102M claims, 1,500 hospitals)",
      "beckershospitalreview.com/finance/86-of-denials-are-potentially-avoidable-strategies-to-better-prevent-manage-denials"),
-    ("KFF, “Claims Denials and Appeals in ACA Marketplace Plans in 2023”",
-     "kff.org/private-insurance/claims-denials-and-appeals-in-aca-marketplace-plans-in-2023"),
     ("Outlook Business, on the IRDAI Annual Report 2023-24, 30 Dec 2024",
      "outlookbusiness.com/economy-and-policy/health-insurers-disallowed-claims-worth-rs-15100-crore-during-fy24"),
     ("Aaj News, “More pain than relief for KP health card holders” (Baker Tilly audit), 22 Nov 2022",
@@ -60,6 +58,11 @@ def stat(value: str, label: str, ref: str = "") -> str:
     return f'<div class="stat"><div class="v">{value}</div><div class="l">{label}{sup}</div></div>'
 
 
+def fact(where: str, value: str, label: str, ref: str) -> str:
+    return (f'<div class="fact"><div class="k">{where}</div><div class="v">{value}</div>'
+            f'<div class="l">{label}<sup>{ref}</sup></div></div>')
+
+
 def cite(*refs: int) -> str:
     return "Sources: " + " · ".join(f"[{r}] {e(SOURCES[r - 1][0].split(',')[0])}" for r in refs)
 
@@ -71,61 +74,41 @@ def slides() -> list[dict]:
     base = meta["base_rejection_rate"]
 
     return [
-        dict(kind="title", body=f"""
+        dict(kind="title", body="""
             <div class="eyebrow">Bano Qabil AI Hackathon</div>
             <h1 class="hero">Claim Check</h1>
-            <p class="lede">Catch the insurance-claim rejection<br><em>before</em> the claim is sent.</p>
+            <p class="lede">Catch the insurance-claim rejection <em>before</em> the claim is sent.</p>
             <p class="team">Mirza Ahsan Baig · Safee Akmal<span>Tasdeeq-e-Bima</span></p>
             """, image="landing.png"),
 
         dict(eyebrow="The problem", title="Claims get rejected for paperwork, not medicine", body=f"""
             <div class="split">
               <div>{ul([
-                  "A clinic treats an insured patient, then bills the insurer",
-                  "Weeks later the claim bounces: <b>no pre-authorisation</b>, a <b>missed filing "
-                  "deadline</b>, <b>missing documents</b>, an <b>amount over tariff</b>",
-                  "Staff rework and resubmit while the money is stuck",
-                  "Small clinics have no billing specialist to catch it",
+                  "Weeks after treatment, the claim bounces: <b>no pre-authorisation</b>, a <b>missed "
+                  "deadline</b>, <b>missing documents</b>",
+                  "The clinic reworks it and waits again for its money",
+                  "Small clinics can’t absorb that — they stop taking insured patients",
               ])}</div>
               <aside class="card">
                 <div class="k">Pre-authorisation</div>
-                <p>Insurer approval needed <b>before</b> a planned treatment. Miss it and correct,
-                necessary care can still go unpaid.</p>
-                <p class="small">94% of US physicians say it delays care.<sup>7</sup></p>
+                <p>Insurer approval needed <b>before</b> a planned treatment. Miss it and correct care
+                can still go unpaid.<sup>6</sup></p>
               </aside>
-            </div>""", sources=[7]),
+            </div>""", sources=[6]),
 
-        dict(eyebrow="Global scale · United States", title="In the US alone, fighting denials costs $25.7 billion a year",
-             body=f"""
-            <div class="stats">
-              {stat("15%", "of claims to private insurers denied at first submission", "1")}
-              {stat("$25.7B", "spent by US providers fighting denials in 2023", "1")}
-              {stat("70%", "of those denials were paid in the end — after costly review", "1")}
-              {stat("86%", "of denials are potentially avoidable", "2")}
-            </div>
-            <p class="note">On ACA marketplace plans, insurers denied about <b>1 in 5</b> in-network claims
-            in 2023, and <b>fewer than 1%</b> of denials were appealed.<sup>3</sup></p>""",
-             sources=[1, 2, 3]),
-
-        dict(eyebrow="Global scale · Emerging markets", title="Hardest where insurance is new", body="""
-            <div class="cols">
-              <div class="card"><div class="k">India</div>
-                <div class="big">71%</div>
-                <p>of health-claim value actually paid in FY 2023-24. <b>₹26,000 crore</b> disallowed
-                or repudiated.<sup>4</sup></p></div>
-              <div class="card"><div class="k">Pakistan · KP Sehat Card</div>
-                <div class="big">5–8 mo</div>
-                <p>payment waits for some hospitals. The programme blamed <b>incomplete documents</b>;
-                94% of hospitals asked for e-claims.<sup>5</sup></p></div>
-              <div class="card"><div class="k">Kenya · SHA</div>
-                <div class="big">600+</div>
-                <p>rural private hospitals stopped accepting the new national cover; 89% called the
-                claims portal non-functional.<sup>6</sup></p></div>
-            </div>""", sources=[4, 5, 6]),
+        dict(eyebrow="The scale", title="A global problem, hardest where insurance is new", body=f"""
+            <div class="grid3">
+              {fact("United States", "15%", "of claims to private insurers denied first time", "1")}
+              {fact("United States", "$25.7B", "spent by providers fighting denials in 2023", "1")}
+              {fact("United States", "86%", "of denials potentially avoidable", "2")}
+              {fact("India", "71%", "of health-claim value actually paid, FY 2023-24", "3")}
+              {fact("Pakistan · KP Sehat Card", "5–8 months", "payment waits, blamed on incomplete documents", "4")}
+              {fact("Kenya", "600+", "rural private hospitals stopped accepting the national cover", "5")}
+            </div>""", sources=[1, 2, 3, 4, 5]),
 
         dict(eyebrow="Our solution", title="A spell-checker for insurance claims", body="""
             <div class="steps">
-              <div><span>1</span><b>Enter the bill</b><p>Patient age and sex, procedure, amount</p></div>
+              <div><span>1</span><b>Enter the bill</b><p>Patient, procedure, amount</p></div>
               <div><span>2</span><b>Answer 3–4 questions</b><p>Only the ones that matter for this claim</p></div>
               <div><span>3</span><b>Fix before sending</b><p>Chance of rejection, the cause, the fix</p></div>
             </div>""", image="check.png"),
@@ -133,35 +116,22 @@ def slides() -> list[dict]:
         dict(eyebrow="Business case", title="Everyone in the claim wins", body=f"""
             <div class="cols">
               <div class="card"><div class="k">Clinics</div>{ul(["Paid sooner", "Less rework", "Predictable cash flow"])}</div>
-              <div class="card"><div class="k">Insurers &amp; TPAs</div>{ul(["Cleaner claims", "Fewer appeals to process", "Lower admin cost"])}</div>
+              <div class="card"><div class="k">Insurers &amp; TPAs</div>{ul(["Cleaner claims", "Fewer appeals", "Lower admin cost"])}</div>
               <div class="card"><div class="k">Patients</div>{ul(["Clinics keep accepting their insurance", "Care isn’t held up by paperwork"])}</div>
             </div>
             <p class="note"><b>How it could earn (proposed):</b> per-clinic subscription · licence to TPAs for
             their provider panel · integration with national e-claims schemes</p>"""),
 
-        dict(kind="divider", eyebrow="Part two", title="How it works"),
-
-        dict(eyebrow="How it works", title="It asks only the questions that matter", body=f"""
-            <div class="split">
-              <div>{ul([
-                  "Picks whichever question tells it the most about <b>this</b> claim",
-                  "Asks about pre-authorisation first when the procedure needs it — never when it doesn’t",
-                  "Updates the chance of rejection after every answer",
-                  "Stops once the verdict is settled: never under 3 questions, never over 8",
-              ])}</div>
-              <div class="stack">
-                {stat(f"{v['mean_questions']:.1f}", "questions on average")}
-                {stat(str(v['distinct_question_orders']), f"different question orders across {v['claims']} test claims")}
-              </div>
-            </div>"""),
-
-        dict(eyebrow="What the clinic sees", title="A verdict it can act on", body=ul([
-            "Chance of rejection, with a <b>low / medium / high</b> verdict",
-            "<b>Which field</b> is causing it, in points",
-            "<b>Six insurer rules</b>: pre-auth, deadline, tariff, coverage, diagnosis fit, patient fit",
-            "The official <b>rejection code</b> (X12 CARC) and the one thing to fix",
-            "A plain-English summary",
-        ]), image="result-risky.png"),
+        dict(eyebrow="How it works", title="Asks what matters, then says what to fix", body=f"""
+            {ul([
+                "Picks the question that tells it the most about <b>this</b> claim",
+                "Pre-authorisation first when the procedure needs it",
+                "Risk updates after every answer; stops once settled",
+                "Shows the cause, six insurer-rule checks, the official rejection code and the fix",
+            ])}
+            <p class="inline-stats"><b>{v['mean_questions']:.1f}</b> questions on average ·
+            <b>{v['distinct_question_orders']}</b> different question orders</p>""",
+             image="result-risky.png"),
 
         dict(eyebrow="Responsible AI", title="The model decides. Qwen only explains.", body="""
             <div class="flow">
@@ -187,32 +157,25 @@ def slides() -> list[dict]:
             <p class="note">{v['claims']} held-out simulated claims, used once. Verdict thresholds were fitted on a
             separate split, not chosen by hand.</p>"""),
 
-        dict(eyebrow="Honest limits", title="What it does not do", body=ul([
-            "<b>Not trained on real claims</b> — no public dataset exists. Records are simulated (Synthea); "
-            "the rules and rejection codes are real",
-            "<b>Doesn’t replace staff</b> — it is a second check before submitting",
-            "<b>Doesn’t submit claims</b> or talk to insurers",
-            "<b>Doesn’t learn by itself</b> — staff corrections are logged, not auto-applied",
-            "<b>No login or encryption yet</b> — built for a demo with synthetic data",
-        ])),
-
-        dict(eyebrow="Roadmap", title="What we’d build next", body=f"""
+        dict(eyebrow="Honest about it", title="Limits today, and what comes next", body=f"""
             <div class="cols two">
-              {ul([
-                  "<b>Pilot</b> with a partner clinic or TPA — real claims, real outcomes",
-                  "<b>Real rejection reasons</b> read from insurers’ remittance files",
-                  "<b>Per-insurer</b> rules and models",
-              ])}
-              {ul([
-                  "<b>Urdu</b> and regional-language interface",
-                  "<b>Connect</b> to clinic billing software and national e-claims portals",
-                  "<b>Security</b> for real data: login, encryption, data agreements",
-              ])}
+              <div class="card"><div class="k">What it does not do</div>{ul([
+                  "Train on real claims — none are public; records are simulated, rules and codes are real",
+                  "Replace staff — it is a second check",
+                  "Submit claims or learn by itself",
+                  "Protect real patient data yet — no login",
+              ])}</div>
+              <div class="card accent"><div class="k">What we’d build next</div>{ul([
+                  "Pilot with a clinic or TPA on real claims",
+                  "Per-insurer rules and models",
+                  "Urdu and regional-language interface",
+                  "Login, encryption, links to billing systems",
+              ])}</div>
             </div>"""),
 
         dict(kind="title", body="""
             <div class="eyebrow">Claim Check · Tasdeeq-e-Bima</div>
-            <h1 class="hero closing">Catch the rejection<br>before you submit.</h1>
+            <h1 class="hero closing">Catch the rejection before you submit.</h1>
             <p class="lede">We’re looking for a <b>partner clinic or TPA</b> to pilot with real claims.</p>
             <p class="team">Mirza Ahsan Baig · Safee Akmal<span>Thank you</span></p>
             """, image="result-clean-dark.png"),
@@ -222,7 +185,6 @@ def slides() -> list[dict]:
             + f"<p class='note small'>Our own results: models/metadata.json and docs/model-card.md in the "
               f"project repository ({meta['n_claims']:,} simulated claims, test split of {v['claims']}).</p>"),
     ]
-
 
 CSS = """
 @font-face { font-family:Geist; src:url(fonts/Geist.woff2) format('woff2'); font-weight:100 900; }
@@ -241,9 +203,12 @@ body { font-family: Geist, Inter, system-ui, sans-serif; color: var(--ink); back
            font-weight:600; margin-bottom:14px; }
 h2 { font-family:'Instrument Serif', Georgia, serif; font-weight:400; font-size:60px; line-height:1.05;
      letter-spacing:-.01em; margin-bottom:36px; max-width:1000px; }
+.title .lede { max-width:420px; }
+.title.with-image .content { width:470px; }
+.title .hero { font-size:92px; }
 .hero { font-family:'Instrument Serif', Georgia, serif; font-weight:400; font-size:112px; line-height:.95;
         letter-spacing:-.02em; }
-.hero.closing { font-size:80px; line-height:1.02; }
+.title .hero.closing { font-size:64px; line-height:1.04; }
 .lede { font-size:26px; line-height:1.35; color:var(--ink2); margin-top:28px; max-width:520px; }
 .lede em { font-family:'Instrument Serif', Georgia, serif; font-size:30px; color:var(--brand); }
 .team { position:absolute; bottom:56px; left:80px; font-size:16px; font-weight:500; }
@@ -266,6 +231,13 @@ sup { font-size:.6em; color:var(--brand); font-weight:600; margin-left:2px; }
 .card p + p { margin-top:12px; }
 .card ul li { font-size:21px; margin-bottom:10px; }
 .card .big { font-family:'Instrument Serif', Georgia, serif; font-size:68px; line-height:1; margin-bottom:12px; }
+.grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
+.fact { background:var(--card); border:1px solid var(--rule); border-radius:16px; padding:20px 24px; }
+.fact .k { font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--brand); font-weight:600; }
+.fact .v { font-family:'Instrument Serif', Georgia, serif; font-size:56px; line-height:1.05; margin-top:8px; }
+.fact .l { font-size:17px; line-height:1.35; color:var(--ink2); margin-top:6px; }
+.inline-stats { font-size:19px; color:var(--muted); margin-top:10px; }
+.inline-stats b { font-family:'Instrument Serif', Georgia, serif; font-size:30px; color:var(--brand); font-weight:400; }
 .small { font-size:15px !important; color:var(--muted) !important; }
 .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; }
 .stat { background:var(--card); border:1px solid var(--rule); border-radius:18px; padding:32px 28px; }
@@ -274,18 +246,19 @@ sup { font-size:.6em; color:var(--brand); font-weight:600; margin-left:2px; }
 .stack .stat { padding:22px 26px; } .stack .stat .v { font-size:56px; }
 .note { font-size:21px; line-height:1.45; color:var(--ink2); margin-top:32px; max-width:1050px; }
 .cols { display:grid; grid-template-columns:repeat(3,1fr); gap:22px; }
-.cols.two { grid-template-columns:1fr 1fr; gap:48px; }
+.cols.two { grid-template-columns:1fr 1fr; gap:24px; }
 .flow { display:grid; grid-template-columns:repeat(3,1fr); gap:22px; margin-bottom:34px; }
 .steps { display:flex; flex-direction:column; gap:26px; margin-top:6px; }
 .steps div { display:grid; grid-template-columns:52px 1fr; column-gap:18px; }
 .steps span { grid-row:span 2; width:44px; height:44px; border-radius:50%; background:var(--brand);
               color:#fff; font-weight:600; font-size:20px; display:flex; align-items:center; justify-content:center; }
 .steps b { font-size:25px; } .steps p { font-size:19px; color:var(--muted); margin-top:4px; }
-.with-image .content { width:480px; }
-.shot { position:absolute; right:-40px; top:120px; height:480px; width:720px; border-radius:16px; overflow:hidden;
+.with-image .content { width:440px; }
+.with-image ul li { font-size:22px; margin-bottom:14px; }
+.with-image h2 { font-size:52px; }
+.shot { position:absolute; right:80px; top:160px; width:640px; height:400px; border-radius:16px; overflow:hidden;
         border:1px solid var(--rule); box-shadow:0 30px 60px -20px rgba(14,20,18,.25); }
-.shot img { width:100%; height:100%; object-fit:cover; object-position:top left; display:block; }
-.title .shot { top:96px; height:528px; right:-60px; width:760px; }
+.shot img { width:100%; height:100%; display:block; }
 .sources { position:absolute; left:80px; right:80px; bottom:26px; font-size:12.5px; color:var(--muted); }
 .foot { position:absolute; right:80px; bottom:26px; font-size:12.5px; color:var(--muted); }
 .divider { background:var(--brand); justify-content:center; }
