@@ -61,14 +61,19 @@ function Progress({ step, settled }: { step: Step; settled: boolean }) {
         <span className="eyebrow">Questions</span>
         <span className="tnum text-[11.5px] text-ink-3">{n} of at most {max}</span>
       </div>
-      <div className="mt-2.5 flex gap-[3px]" aria-hidden>
+      <div className="relative mt-2.5 flex gap-[3px]" aria-hidden>
         {Array.from({ length: max }, (_, i) => (
           <span
             key={i}
             className="h-1.5 flex-1 rounded-full transition-colors duration-300"
-            style={{ background: i < n ? "var(--brand)" : i < min ? "var(--surface-3)" : "var(--surface-2)" }}
+            style={{ background: i < n ? "var(--brand)" : "var(--surface-3)" }}
           />
         ))}
+        {/* the minimum before any verdict, marked on the track itself */}
+        <span
+          className="absolute -top-1 h-3.5 w-[2px] rounded-full bg-ink-3"
+          style={{ left: `calc(${(min / max) * 100}% - 2px)` }}
+        />
       </div>
       <p className="mt-2.5 text-[12px] leading-relaxed text-ink-3">
         {settled
@@ -93,6 +98,12 @@ export default function Page() {
   const [history, setHistory] = useState<TrajectoryPoint[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; lost: boolean } | null>(null);
+  // The check finished but its verdict could not be fetched: offer a retry, never strand it.
+  const [verdictError, setVerdictError] = useState<string | null>(null);
+  // Bumped on every new verdict, so per-verdict UI (the correction form) starts fresh.
+  const [verdictVersion, setVerdictVersion] = useState(0);
+  // One persistent live region, so screen readers hear each new question and the verdict.
+  const [announcement, setAnnouncement] = useState("");
 
   // The intake form and the landing figures come from the trained artefacts.
   useEffect(() => {
@@ -112,20 +123,31 @@ export default function Page() {
 
   const fail = (e: unknown) => {
     const lost = e instanceof ApiError && e.sessionLost;
-    setError({ message: e instanceof Error ? e.message : "Something went wrong.", lost });
+    const message = e instanceof Error ? e.message : "Something went wrong.";
+    setError({ message, lost });
+    setAnnouncement(message);
     setAutoplay(false);
   };
 
   const remember = (s: Step) => {
     const q = s.question;
-    if (q) setQuestions((prev) => ({ ...prev, [q.feature]: q }));
+    if (q) {
+      setQuestions((prev) => ({ ...prev, [q.feature]: q }));
+      setAnnouncement(`Question ${s.n_answered + 1}: ${q.text}`);
+    }
   };
 
   const finish = useCallback(async (sessionId: string) => {
+    setVerdictError(null);
     try {
-      setResult(await api.result(sessionId));
+      const verdict = await api.result(sessionId);
+      setResult(verdict);
+      setVerdictVersion((v) => v + 1);
+      setAutoplay(false);
+      setAnnouncement(`Verdict: ${verdict.probability_percent}% rejection risk. ${verdict.explanation.text}`);
     } catch (e) {
-      fail(e);
+      if (e instanceof ApiError && e.sessionLost) fail(e);
+      else setVerdictError(e instanceof Error ? e.message : "The verdict could not be loaded.");
     }
   }, []);
 
@@ -143,7 +165,8 @@ export default function Page() {
       setResult(null);
       setQuestions({});
       remember(first);
-      setHistory([{ label: "Bill entered", detail: billSummary(first), probability: first.probability }]);
+      setVerdictError(null);
+      setHistory([{ tick: "Bill", label: "Bill entered", detail: billSummary(first), probability: first.probability }]);
       setStep(first);
       setView("check");
       window.scrollTo({ top: 0 });
@@ -163,23 +186,26 @@ export default function Page() {
 
   async function submit(feature: string, value: unknown, edit: boolean) {
     if (!step) return;
+    if (edit) setAutoplay(false);   // a correction is the user taking over from the script
     setBusy(true);
     setError(null);
     try {
       const next = await api.answer(step.session_id, feature, value);
+      // The claim has changed on the server, so any verdict on screen is now stale.
+      setResult(null);
       remember(next);
       const field = next.answered.find((a) => a.feature === feature);
       setHistory((h) => [
         ...h,
         {
-          label: edit ? `Changed: ${field?.label ?? feature}` : field?.label ?? feature,
-          detail: `${field?.label ?? feature}: ${field?.value_label ?? String(value)}`,
+          tick: edit ? "Edit" : `Q${next.n_answered}`,
+          label: edit ? `Changed ${field?.label ?? feature}` : field?.label ?? feature,
+          detail: field?.value_label ?? String(value),
           probability: next.probability,
         },
       ]);
       setStep(next);
       if (next.done) await finish(next.session_id);
-      else setResult(null);
     } catch (e) {
       fail(e);
     } finally {
@@ -200,7 +226,15 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoplay, script, question, busy, result, error]);
 
+  function toggleAutoplay() {
+    setAutoplay((on) => {
+      if (!on) setError(null);   // pressing Play is the user's go-ahead to carry on
+      return !on;
+    });
+  }
+
   function home() {
+    setVerdictError(null);
     setView("landing");
     setStep(null);
     setResult(null);
@@ -213,10 +247,19 @@ export default function Page() {
 
   // ---------------------------------------------------------------- views
 
+  // Once the health poll sees the service again, a "not reachable" message is stale.
+  const recover = () => setError((e) => (e && !e.lost ? null : e));
+  const live = (
+    <div className="sr-only" role="status" aria-live="polite">
+      {announcement}
+    </div>
+  );
+
   if (view === "landing" || (view === "check" && !step)) {
     return (
       <div className="flex min-h-full flex-col">
-        <TopBar onHome={home} />
+        {live}
+        <TopBar onHome={home} onRecover={recover} />
         <main className="flex-1">
           <Landing
             meta={meta}
@@ -238,7 +281,8 @@ export default function Page() {
   if (view === "intake" && meta) {
     return (
       <div className="flex min-h-full flex-col">
-        <TopBar onHome={home} />
+        {live}
+        <TopBar onHome={home} onRecover={recover} />
         <main className="flex-1">
           <Intake meta={meta} busy={busy} error={error?.message ?? null} onBack={home} onSubmit={startIntake} />
         </main>
@@ -266,9 +310,15 @@ export default function Page() {
     </div>
   );
 
+  const scriptGap =
+    script && s.question && script[s.question.feature] === undefined
+      ? "The demo script has no answer for this question — pick one yourself."
+      : null;
+
   return (
     <div className="flex min-h-full flex-col">
-      <TopBar onHome={home} />
+      {live}
+      <TopBar onHome={home} onRecover={recover} />
 
       {/* On a narrow screen the rail sits below the fold, so the reading is repeated
           as a sticky strip: the model's current opinion is never out of view. */}
@@ -286,6 +336,7 @@ export default function Page() {
           <div className="mt-6 space-y-4">
             {errorBanner}
             <ResultView
+              key={verdictVersion}
               result={result}
               questions={questions}
               busy={busy}
@@ -307,12 +358,26 @@ export default function Page() {
                     busy={busy}
                     change={s.last_change}
                     autoplay={script ? autoplay : null}
-                    onToggleAutoplay={() => setAutoplay((a) => !a)}
+                    notice={scriptGap}
+                    onToggleAutoplay={toggleAutoplay}
                     onAnswer={(v) => submit(s.question!.feature, v, false)}
                   />
+                ) : verdictError ? (
+                  <div className="flex flex-wrap items-center gap-4 py-8">
+                    <p className="flex-1 text-[14px] text-ink-2">
+                      Every question is answered, but the verdict could not be loaded. {verdictError}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => finish(s.session_id)}
+                      className="inline-flex h-11 items-center gap-2 rounded-full bg-brand px-5 text-[14px] font-medium text-brand-ink transition hover:bg-brand-hover"
+                    >
+                      Try again
+                    </button>
+                  </div>
                 ) : (
                   <div className="flex items-center gap-3 py-10 text-[14px] text-ink-2" role="status">
-                    <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-brand" />
+                    <span className="pulse-dot h-2.5 w-2.5 rounded-full bg-brand" />
                     Preparing the verdict…
                   </div>
                 )}

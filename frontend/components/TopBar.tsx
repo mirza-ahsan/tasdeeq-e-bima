@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IconMoon, IconSun } from "@/components/icons";
 import { api } from "@/lib/api";
 import type { Health } from "@/lib/types";
@@ -30,21 +30,29 @@ export function BrandMark({ size = 30 }: { size?: number }) {
 }
 
 /** Whether the risk service is up. Retries quietly, so it never shows "connecting…" forever. */
-function useHealth() {
+function useHealth(onRecover?: () => void) {
   const [health, setHealth] = useState<Health | null>(null);
   const [failed, setFailed] = useState(false);
+  const recover = useRef(onRecover);
+  useEffect(() => {
+    recover.current = onRecover;
+  });
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
+    let wasDown = false;
     const poll = async () => {
       try {
         const h = await api.health();
         if (!cancelled) {
           setHealth(h);
           setFailed(false);
+          if (wasDown) recover.current?.();
+          wasDown = false;
         }
       } catch {
         if (!cancelled) setFailed(true);
+        wasDown = true;
       }
       if (!cancelled) timer = setTimeout(poll, 15_000);
     };
@@ -91,8 +99,8 @@ function ThemeToggle() {
   );
 }
 
-export function TopBar({ onHome }: { onHome?: () => void }) {
-  const { health, failed } = useHealth();
+export function TopBar({ onHome, onRecover }: { onHome?: () => void; onRecover?: () => void }) {
+  const { health, failed } = useHealth(onRecover);
   const online = health?.models_loaded && !failed;
 
   return (
