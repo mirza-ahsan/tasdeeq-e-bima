@@ -127,7 +127,8 @@ fix_before_submitting and rule_check_issues. Never mention reason codes.
 Write exactly two sentences, at most 45 words in total.
 
 If risk_band is "high" or "medium" and there is a likely_rejection_reason:
-- Sentence 1: state the rejection risk and that reason.
+- Sentence 1: begin "This claim has a N% chance of rejection because" and give that reason, \
+all in this one sentence.
 - Sentence 2: give its staff_action as the one thing to do before submitting.
 
 If risk_band is "high" or "medium", there is no likely_rejection_reason, and a flagged \
