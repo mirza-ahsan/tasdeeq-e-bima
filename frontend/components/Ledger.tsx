@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { IconCheck, IconPencil } from "@/components/icons";
 import { GLOSSARY, Term } from "@/components/Term";
 import { points as fmtPoints } from "@/lib/format";
+import { parseWhole } from "@/lib/numbers";
 import type { Field, Question } from "@/lib/types";
 
 /** Below this, a movement is noise and pointing at it would mislead. */
@@ -45,19 +46,25 @@ function Editor({
   useEffect(() => first.current?.focus(), []);
 
   if (question.kind === "number") {
-    const n = Number(text);
+    const n = parseWhole(text);
     const ok =
-      /^\d+$/.test(text) &&
+      n !== null &&
       (question.min_value === null || n >= question.min_value) &&
       (question.max_value === null || n <= question.max_value);
     return (
       <form
-        className="mt-2 flex items-center gap-2"
+        className="mt-2 flex flex-wrap items-center gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           if (ok) onSave(n);
         }}
       >
+        {text !== "" && !ok && (
+          <span role="alert" className="order-last basis-full text-[12px] text-crit-ink">
+            A whole number between {question.min_value?.toLocaleString()} and{" "}
+            {question.max_value?.toLocaleString()}.
+          </span>
+        )}
         <input
           autoFocus
           inputMode="numeric"

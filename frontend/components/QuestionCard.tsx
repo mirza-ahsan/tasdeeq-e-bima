@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { IconAlert, IconArrowRight, IconPause, IconPlay, IconSparkle } from "@/components/icons";
 import { GLOSSARY, Term } from "@/components/Term";
+import { parseWhole } from "@/lib/numbers";
 import type { Change, Question } from "@/lib/types";
 
 /** A jump this large is worth interrupting the flow for; smaller ones sit in the ledger. */
@@ -48,9 +49,9 @@ export function QuestionCard({
   const [text, setText] = useState<string>(() =>
     question.kind === "number" && suggested !== undefined && suggested !== null ? String(suggested) : "",
   );
-  const digits = text.replace(/,/g, "");
-  const wellFormed = /^\d+$/.test(digits);
-  const number = Number(digits);
+  const parsed = parseWhole(text);
+  const wellFormed = parsed !== null;
+  const number = parsed ?? NaN;
   const numberOk =
     wellFormed &&
     (question.min_value === null || number >= question.min_value) &&
@@ -69,7 +70,8 @@ export function QuestionCard({
     if (question.kind !== "choice") return;
     const onKey = (e: KeyboardEvent) => {
       if (busy || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (!card.current?.contains(document.activeElement)) return;
+      const focused = document.activeElement;
+      if (!card.current?.contains(focused) || focused?.closest("[data-no-shortcuts]")) return;
       const i = e.key.toUpperCase().charCodeAt(0) - 65;
       if (e.key.length === 1 && i >= 0 && i < question.options.length) {
         e.preventDefault();
@@ -125,6 +127,7 @@ export function QuestionCard({
         {autoplay !== null && (
           <button
             type="button"
+            data-no-shortcuts
             onClick={onToggleAutoplay}
             className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong bg-surface px-3 text-[12px] text-ink-2 transition hover:text-ink"
           >

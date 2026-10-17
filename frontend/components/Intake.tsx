@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { IconArrowLeft, IconArrowRight, IconShield } from "@/components/icons";
 import { pkr } from "@/lib/format";
+import { parseWhole } from "@/lib/numbers";
 import type { Intake as IntakeValues, Meta } from "@/lib/types";
 
 /**
@@ -57,17 +58,16 @@ export function Intake({
 
   // Whole numbers only. Anything else is refused with a message, never silently stripped:
   // "4.5" must not become 45, nor "1500.00" PKR 150,000.
-  const ageNum = Number(age);
-  const amountDigits = amount.replace(/,/g, "").trim();
-  const amountNum = Number(amountDigits);
-  const ageOk = /^\d+$/.test(age) && ageNum >= ageMin && ageNum <= ageMax;
-  const amountOk = /^\d+$/.test(amountDigits) && amountNum >= amtMin && amountNum <= amtMax;
+  const ageNum = /^\d+$/.test(age) ? Number(age) : null;
+  const amountNum = parseWhole(amount);
+  const ageOk = ageNum !== null && ageNum >= ageMin && ageNum <= ageMax;
+  const amountOk = amountNum !== null && amountNum >= amtMin && amountNum <= amtMax;
   const ready = ageOk && gender && proc && amountOk;
 
   const hint = useMemo(() => {
     if (!proc) return null;
-    const needs = proc.needs_pre_auth || (amountOk && amountNum > meta.pre_auth_amount_threshold_pkr);
-    const ratio = amountOk && proc.typical_amount_pkr ? amountNum / proc.typical_amount_pkr : null;
+    const needs = proc.needs_pre_auth || (amountOk && amountNum! > meta.pre_auth_amount_threshold_pkr);
+    const ratio = amountOk && proc.typical_amount_pkr ? amountNum! / proc.typical_amount_pkr : null;
     return { needs, ratio };
   }, [proc, amountOk, amountNum, meta.pre_auth_amount_threshold_pkr]);
 
@@ -75,10 +75,10 @@ export function Intake({
     e.preventDefault();
     if (!ready) return;
     onSubmit({
-      patient_age: ageNum,
+      patient_age: ageNum!,
       patient_gender: gender!,
       procedure_category: proc!.value,
-      claim_amount_pkr: amountNum,
+      claim_amount_pkr: amountNum!,
     });
   }
 
@@ -209,8 +209,8 @@ export function Intake({
                   const raw = e.target.value.slice(0, 12);
                   // Regroup a clean number as it is typed; leave anything else as typed so
                   // the clerk sees what was wrong with it.
-                  const plain = raw.replace(/,/g, "");
-                  setAmount(/^\d+$/.test(plain) ? Number(plain).toLocaleString("en-US") : raw);
+                  const n = parseWhole(raw);
+                  setAmount(n !== null ? n.toLocaleString("en-US") : raw);
                 }}
                 placeholder={proc ? proc.typical_amount_pkr.toLocaleString("en-US") : "0"}
                 aria-invalid={amount !== "" && !amountOk}
