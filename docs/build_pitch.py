@@ -7,7 +7,9 @@ the problem and the business case before the product, and a numbered source for 
 outside figure so a judge can check it. Our own figures are read from models/metadata.json
 at build time, like the technical deck, so the two cannot disagree with the model. Outside
 figures were checked against the cited pages on 2026-10-17; re-check before reusing them.
-Rendered as HTML through headless Chromium (fonts from Google Fonts, so it needs internet).
+Rendered as HTML through headless Chromium. The fonts (Geist, Instrument Serif; both OFL)
+are vendored in docs/fonts: loading them from Google Fonts silently fell back to a system
+serif whenever the request was slow, and the headlines no longer fit.
 """
 
 from __future__ import annotations
@@ -36,10 +38,6 @@ SOURCES = [
      "english.aaj.tv/news/30304857"),
     ("Business Daily Africa, “Rural private hospitals reject SHA cover over Sh22bn debt”, 20 Feb 2025",
      "businessdailyafrica.com/bd/corporate/health/rural-private-hospitals-reject-sha-cover-over-sh22bn-debt-4934984"),
-    ("WHO & World Bank, Tracking Universal Health Coverage: 2025 Global Monitoring Report",
-     "worldbank.org/en/topic/universalhealthcoverage/publication/2025-global-monitoring-report-gmr"),
-    ("MarkNtel Advisors, Global Healthcare Denial Management Market 2025-2030 (market estimate)",
-     "marknteladvisors.com/query/report-enquiry/healthcare-denial-management-market.html"),
     ("American Medical Association, 2024 Prior Authorization Physician Survey",
      "ama-assn.org/press-center/ama-press-releases/ama-survey-indicates-prior-authorization-wreaks-havoc-patient-care"),
 ]
@@ -93,9 +91,9 @@ def slides() -> list[dict]:
                 <div class="k">Pre-authorisation</div>
                 <p>Insurer approval needed <b>before</b> a planned treatment. Miss it and correct,
                 necessary care can still go unpaid.</p>
-                <p class="small">94% of US physicians say it delays care.<sup>9</sup></p>
+                <p class="small">94% of US physicians say it delays care.<sup>7</sup></p>
               </aside>
-            </div>""", sources=[9]),
+            </div>""", sources=[7]),
 
         dict(eyebrow="Global scale · United States", title="In the US alone, fighting denials costs $25.7 billion a year",
              body=f"""
@@ -124,35 +122,6 @@ def slides() -> list[dict]:
                 <p>rural private hospitals stopped accepting the new national cover; 89% called the
                 claims portal non-functional.<sup>6</sup></p></div>
             </div>""", sources=[4, 5, 6]),
-
-        dict(eyebrow="Why it matters", title="Avoidable rejections are a financial-inclusion problem",
-             body=f"""
-            <div class="split">
-              <div>{ul([
-                  "Governments are scaling health insurance to close the coverage gap",
-                  "That means millions of new claims, new rules — and new rejections",
-                  "Clinics that aren’t paid stop accepting insured patients",
-                  "The patients insurance was meant to protect lose access",
-              ])}</div>
-              <div class="stack">
-                {stat("4.6B", "people lack essential health services", "7")}
-                {stat("2.1B", "face financial hardship paying for care", "7")}
-              </div>
-            </div>""", sources=[7]),
-
-        dict(eyebrow="The opportunity", title="Big hospitals have claim checkers. Small clinics don’t.",
-             body=f"""
-            <div class="split">
-              <div>{ul([
-                  "Claim-checking software exists — built into large hospital billing systems",
-                  "A small clinic in a new insurance market has a receptionist and a form",
-                  "No tool tells them, before submitting, <b>what will bounce and why</b>",
-              ])}</div>
-              <div class="stack">
-                {stat("≈$15B", "denial-management market, 2024", "8")}
-                {stat("≈$30B", "projected by 2030 (industry estimate)", "8")}
-              </div>
-            </div>""", sources=[8]),
 
         dict(eyebrow="Our solution", title="A spell-checker for insurance claims", body="""
             <div class="steps">
@@ -256,6 +225,10 @@ def slides() -> list[dict]:
 
 
 CSS = """
+@font-face { font-family:Geist; src:url(fonts/Geist.woff2) format('woff2'); font-weight:100 900; }
+@font-face { font-family:'Instrument Serif'; src:url(fonts/InstrumentSerif-Regular.woff2) format('woff2'); }
+@font-face { font-family:'Instrument Serif'; font-style:italic;
+             src:url(fonts/InstrumentSerif-Italic.woff2) format('woff2'); }
 @page { size: 1280px 720px; margin: 0; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root { --ink:#0E1412; --ink2:#3E4945; --muted:#6B7571; --brand:#0B5D4B; --brand-soft:#E3EEEA;
@@ -338,10 +311,8 @@ def render(deck: list[dict]) -> str:
                      f'<h2>{s["title"]}</h2>{s["body"]}</div>{img}')
         cls = f'slide {kind}' + (" with-image" if s.get("image") else "")
         pages.append(f'<section class="{cls}">{inner}{src}{foot}</section>')
-    fonts = ("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600"
-             "&family=Instrument+Serif:ital@0;1&display=swap")
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Claim Check — pitch</title>'
-            f'<link rel="stylesheet" href="{fonts}"><style>{CSS}</style></head>'
+            f'<style>{CSS}</style></head>'
             f'<body>{"".join(pages)}</body></html>')
 
 
