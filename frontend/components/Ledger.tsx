@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IconCheck, IconPencil } from "@/components/icons";
 import { GLOSSARY, Term } from "@/components/Term";
 import { points as fmtPoints } from "@/lib/format";
@@ -40,10 +40,14 @@ function Editor({
   onCancel: () => void;
 }) {
   const [text, setText] = useState(String(current ?? ""));
+  const first = useRef<HTMLButtonElement>(null);
+  // Opening the editor moves focus into it; the pencil that opened it is gone.
+  useEffect(() => first.current?.focus(), []);
+
   if (question.kind === "number") {
     const n = Number(text);
     const ok =
-      text !== "" && Number.isInteger(n) &&
+      /^\d+$/.test(text) &&
       (question.min_value === null || n >= question.min_value) &&
       (question.max_value === null || n <= question.max_value);
     return (
@@ -58,7 +62,8 @@ function Editor({
           autoFocus
           inputMode="numeric"
           value={text}
-          onChange={(e) => setText(e.target.value.replace(/\D/g, ""))}
+          onChange={(e) => setText(e.target.value.slice(0, 12))}
+          aria-invalid={text !== "" && !ok}
           className="tnum h-9 w-28 rounded-lg border border-line-strong bg-surface px-3 text-[14px] outline-none focus:border-brand"
           aria-label={question.text}
         />
@@ -74,11 +79,12 @@ function Editor({
   }
   return (
     <div className="mt-2 flex flex-wrap gap-1.5">
-      {question.options.map((o) => {
+      {question.options.map((o, i) => {
         const on = o.value === current;
         return (
           <button
             key={String(o.value)}
+            ref={i === 0 ? first : undefined}
             type="button"
             disabled={busy}
             onClick={() => (on ? onCancel() : onSave(o.value))}

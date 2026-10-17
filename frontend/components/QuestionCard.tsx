@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IconAlert, IconArrowRight, IconPause, IconPlay, IconSparkle } from "@/components/icons";
 import { GLOSSARY, Term } from "@/components/Term";
 import type { Change, Question } from "@/lib/types";
@@ -13,7 +13,11 @@ const ALERT_POINTS = 8;
  *
  * The information-gain figure is shown deliberately: it is the evidence that the
  * question was chosen rather than scripted. Options can be picked with their letter
- * keys; a typed answer is checked against the same limits the API enforces.
+ * keys while the card has focus — and focus moves to each new question, so keyboard
+ * and screen-reader users follow the flow. The keys are inert anywhere else (the
+ * answer editor, the demo controls), so a letter typed there cannot answer by accident.
+ * A typed answer must be a whole number within the limits the API enforces; nothing is
+ * silently stripped ("1500.00" is refused, not read as 150,000).
  *
  * `change` reports what the previous answer did to the estimate. A big jump is raised
  * here, attached to the next question, because a problem the user can still fix should
@@ -26,6 +30,7 @@ export function QuestionCard({
   busy,
   change,
   autoplay,
+  notice,
   onToggleAutoplay,
   onAnswer,
 }: {
@@ -35,6 +40,7 @@ export function QuestionCard({
   busy: boolean;
   change: Change | null;
   autoplay: boolean | null;
+  notice?: string | null;
   onToggleAutoplay: () => void;
   onAnswer: (value: unknown) => void;
 }) {
@@ -42,20 +48,28 @@ export function QuestionCard({
   const [text, setText] = useState<string>(() =>
     question.kind === "number" && suggested !== undefined && suggested !== null ? String(suggested) : "",
   );
-  const number = Number(text);
+  const digits = text.replace(/,/g, "");
+  const wellFormed = /^\d+$/.test(digits);
+  const number = Number(digits);
   const numberOk =
-    text !== "" &&
-    Number.isInteger(number) &&
+    wellFormed &&
     (question.min_value === null || number >= question.min_value) &&
     (question.max_value === null || number <= question.max_value);
 
-  // Letter keys pick an option; ignored while typing in a field.
+  const card = useRef<HTMLElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  // A new question takes focus (the number field focuses itself).
+  useEffect(() => {
+    if (question.kind === "choice") heading.current?.focus({ preventScroll: true });
+  }, [question]);
+
+  // Letter keys pick an option, but only while focus is inside this card.
   useEffect(() => {
     if (question.kind !== "choice") return;
     const onKey = (e: KeyboardEvent) => {
       if (busy || e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target as HTMLElement | null;
-      if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
+      if (!card.current?.contains(document.activeElement)) return;
       const i = e.key.toUpperCase().charCodeAt(0) - 65;
       if (e.key.length === 1 && i >= 0 && i < question.options.length) {
         e.preventDefault();
@@ -69,7 +83,7 @@ export function QuestionCard({
   const big = change && Math.abs(change.delta_points) >= ALERT_POINTS ? change : null;
 
   return (
-    <section className="rise" aria-live="polite">
+    <section ref={card} className="rise">
       {big && (
         <div
           role="status"
@@ -119,8 +133,13 @@ export function QuestionCard({
           </button>
         )}
       </div>
+      {notice && <p className="mt-3 text-[12.5px] text-ink-2">{notice}</p>}
 
-      <h2 className="mt-5 text-[28px] font-semibold leading-[1.2] tracking-[-0.025em] sm:text-[32px]">
+      <h2
+        ref={heading}
+        tabIndex={-1}
+        className="mt-5 text-[28px] font-semibold leading-[1.2] tracking-[-0.025em] outline-none sm:text-[32px]"
+      >
         {question.text}
       </h2>
       <p className="mt-2.5 max-w-[620px] text-[14.5px] leading-relaxed text-ink-2">{question.help_text}</p>
@@ -179,7 +198,7 @@ export function QuestionCard({
                 autoFocus
                 inputMode="numeric"
                 value={text}
-                onChange={(e) => setText(e.target.value.replace(/\D/g, "").slice(0, 7))}
+                onChange={(e) => setText(e.target.value.slice(0, 12))}
                 placeholder="0"
                 aria-invalid={text !== "" && !numberOk}
                 className="tnum h-14 w-44 rounded-2xl bg-transparent px-4 text-[24px] font-medium outline-none"
@@ -196,8 +215,9 @@ export function QuestionCard({
             Continue <IconArrowRight size={16} className="transition group-hover:translate-x-0.5" />
           </button>
           {text !== "" && !numberOk && (
-            <span className="w-full text-[12.5px] text-crit-ink">
-              Enter a whole number between {question.min_value} and {question.max_value}.
+            <span role="alert" className="w-full text-[12.5px] text-crit-ink">
+              {wellFormed ? "Enter" : "Digits only, please — enter"} a whole number between{" "}
+              {question.min_value?.toLocaleString()} and {question.max_value?.toLocaleString()}.
             </span>
           )}
         </form>
@@ -205,7 +225,7 @@ export function QuestionCard({
 
       {question.kind === "choice" && (
         <p className="mt-4 hidden text-[12px] text-ink-3 sm:block">
-          Tip: press <kbd className="rounded border border-line bg-surface-2 px-1 font-mono">A</kbd>–
+          Tip: while this question has focus, press <kbd className="rounded border border-line bg-surface-2 px-1 font-mono">A</kbd>–
           <kbd className="rounded border border-line bg-surface-2 px-1 font-mono">
             {String.fromCharCode(64 + question.options.length)}
           </kbd>{" "}

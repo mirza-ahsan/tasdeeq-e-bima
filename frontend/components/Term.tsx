@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 /**
  * A domain term with its definition attached.
@@ -8,7 +8,9 @@ import { useId, useState } from "react";
  * The audience is clinic admin staff, not developers: CARC, Shapley attribution and
  * information gain are all load-bearing here and none of them can be assumed. Hiding
  * the jargon would cost accuracy, so it stays — with the definition one hover, tap or
- * Tab away. `aria-describedby` ties the definition to the term for screen readers.
+ * Tab away. A tap or click *opens* it (toggling meant the hover-then-click of a mouse,
+ * or the focus-then-tap of a touch screen, closed it again at once); Escape or a tap
+ * elsewhere closes it. `aria-describedby` ties the definition to the term.
  */
 export function Term({
   children,
@@ -21,9 +23,24 @@ export function Term({
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
+  const root = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onDown = (e: PointerEvent) => {
+      if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onDown);
+    };
+  }, [open]);
 
   return (
-    <span className="relative inline-block">
+    <span ref={root} className="relative inline-block">
       <button
         type="button"
         className="term bg-transparent p-0 text-left font-[inherit] text-[inherit] [letter-spacing:inherit]"
@@ -33,7 +50,7 @@ export function Term({
         onMouseLeave={() => setOpen(false)}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(true)}
       >
         {children}
       </button>
