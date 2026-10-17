@@ -41,7 +41,7 @@ scripts/              fetch_synthea, check_drift (CI gate), screenshots, test_da
 uv sync --frozen --all-extras             # Python 3.12 env exactly as uv.lock pins it
 uv run pytest -q                          # offline; never calls Qwen or touches feedback.db
 uv run pytest -q -m live                  # one real DashScope call (needs .env)
-uv run uvicorn backend.main:app --reload --port 8000
+uv run uvicorn backend.main:app --reload --port 8000 --no-proxy-headers
 uv run python scripts/test_dashscope.py   # Qwen end-to-end check before a demo
 cd frontend && npm ci && npm run dev      # UI on :3000, proxies /api to API_URL (:8000)
 cd frontend && npm run typecheck && npm run lint && npm test   # typecheck runs next typegen first
@@ -108,7 +108,9 @@ IMPLEMENTATION_PLAN.md from `models/metadata.json`; re-check the demo claims in
 
 - Rate limits key on the client address. Behind our proxies only the **rightmost**
   X-Forwarded-For hop is trusted (backend `client_key`, frontend `lib/visitor.ts`); the
-  leftmost entry is attacker-controlled. nginx must set or append it, never pass it raw.
+  leftmost entry is attacker-controlled. Trust is opt-in on both sides
+  (`TRUST_PROXY_HEADERS`, `TRUST_FORWARDED_FOR`), uvicorn runs with `--no-proxy-headers`,
+  and nginx must *set* the header (`$remote_addr`), never pass a client's through.
 - Errors never echo submitted values (custom 422 handler); `NaN`/`Infinity` must stay 422.
 
 ## Gotchas

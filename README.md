@@ -134,7 +134,7 @@ uv sync --frozen --all-extras             # exactly the versions in uv.lock
 cp .env.example .env                      # optional: DashScope key for Qwen
 uv run python scripts/test_dashscope.py   # optional: confirms Qwen end to end
 
-uv run uvicorn backend.main:app --port 8000          # API  -> :8000
+uv run uvicorn backend.main:app --port 8000 --no-proxy-headers   # API -> :8000
 cd frontend && npm ci && npm run dev                 # UI   -> :3000 (proxies /api to :8000)
 ```
 

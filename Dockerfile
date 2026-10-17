@@ -46,4 +46,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
   CMD curl -fsS http://localhost:8000/api/health || exit 1
 
 # DASHSCOPE_* and QWEN_MODEL are injected at runtime. Never bake .env into an image.
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --no-proxy-headers: whether X-Forwarded-For is trusted is decided by TRUST_PROXY_HEADERS
+# in the app alone, not by uvicorn's own default of trusting anything from loopback.
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]

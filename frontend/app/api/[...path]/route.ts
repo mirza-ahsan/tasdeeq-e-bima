@@ -38,7 +38,7 @@ async function forward(request: NextRequest, path: string[], method: "GET" | "PO
   }
 
   const headers = new Headers({ "Content-Type": "application/json" });
-  const client = visitor(request.headers);
+  const client = visitor(request.headers, process.env.TRUST_FORWARDED_FOR === "true");
   if (client) headers.set("X-Forwarded-For", client);
 
   try {

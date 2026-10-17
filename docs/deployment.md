@@ -98,7 +98,10 @@ server {
 ```
 
 `X-Forwarded-For` is *set* to the connecting address rather than appended to, so a
-visitor cannot choose their own rate-limit key. Then add TLS:
+visitor cannot choose their own rate-limit key; compose tells the web app to trust it
+(`TRUST_FORWARDED_FOR=true`) and the API to trust the web app (`TRUST_PROXY_HEADERS=true`),
+and the API image runs uvicorn with `--no-proxy-headers` so nothing else is trusted. Then add
+TLS:
 
 ```bash
 certbot --nginx -d claimcheck.example.com    # rewrites the server block for 443 + redirect

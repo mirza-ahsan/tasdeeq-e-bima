@@ -24,6 +24,10 @@ services:
     build: ./frontend
     environment:
       API_URL: http://api:8000
+      # nginx in front sets X-Forwarded-For to the visitor's address (docs/deployment.md).
+      # Without a proxy you control in front, leave this unset: the header would be the
+      # visitor's own claim.
+      TRUST_FORWARDED_FOR: "true"
     ports: ["127.0.0.1:3000:3000"]
     depends_on:
       api:

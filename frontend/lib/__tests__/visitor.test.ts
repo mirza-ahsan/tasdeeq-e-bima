@@ -12,6 +12,10 @@ describe("visitor", () => {
     expect(visitor(h({ "x-forwarded-for": "203.0.113.9" }))).toBe("203.0.113.9");
   });
 
+  it("ignores the header entirely unless a proxy we run is in front", () => {
+    expect(visitor(h({ "x-forwarded-for": "6.6.6.6" }), false)).toBe("");
+  });
+
   it("falls back to x-real-ip, then to nothing", () => {
     expect(visitor(h({ "x-real-ip": "198.51.100.4" }))).toBe("198.51.100.4");
     expect(visitor(h({}))).toBe("");
