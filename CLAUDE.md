@@ -126,5 +126,5 @@ IMPLEMENTATION_PLAN.md from `models/metadata.json`; re-check the demo claims in
 - `frontend/AGENTS.md` / `frontend/CLAUDE.md` are written by `next dev`; keep them tracked.
 - This Next.js version differs from older ones — read `frontend/node_modules/next/dist/docs/`
   before using an unfamiliar API.
-- Docker is not installed on the dev machine; the Dockerfiles are verified by replaying
-  their steps, not by `docker build`.
+- Docker is installed (29.9 + Compose); `docker compose --env-file .env up --build`
+  builds both images (the API image runs the test suite) and serves on localhost:3000.

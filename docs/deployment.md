@@ -1,11 +1,11 @@
 # Deployment — Alibaba Cloud
 
-> **Status: prepared, not executed.** Docker is not installed on the development machine,
-> so the images have not been built here. What *has* been verified: the backend
-> Dockerfile's steps replayed in a clean directory (exact `uv.lock` install, the test
-> stage passing on exactly the files the image copies), and the frontend's standalone
-> server running with `API_URL` read at runtime and proxying `/api`. Budget an hour for
-> the first real `docker compose build` before demo day, not on it.
+> **Status: built and run locally; not yet deployed to ECS.** `docker compose build` and
+> `up` were verified on the development machine (Docker 29.9, Compose 5.6): the API image's
+> test stage passes inside the build, the API reports healthy before the web container
+> starts, the API runs as a non-root user, both ports bind to localhost only, and a full
+> demo — verdict, live Qwen explanation, correction logged to the `feedback` volume — works
+> through the web app's `/api` proxy. The ECS steps below have not been executed.
 
 ## What gets deployed
 

@@ -148,9 +148,8 @@ The system we built supports all four. It simply cannot access the data they req
 ## Stack
 
 Python 3.12, LightGBM, FastAPI · Next.js 16, TypeScript, Tailwind · Qwen (`qwen-plus`) via
-Alibaba Cloud DashScope. Both services are containerised; [`deployment.md`](deployment.md) is
-the runbook for Alibaba Cloud ECS. The images' build steps have been replayed and verified
-locally, but the containers themselves have not yet been built or deployed — the demo runs
-locally.
+Alibaba Cloud DashScope. Both services are containerised, and the images have been built and
+run end to end locally with Docker Compose; [`deployment.md`](deployment.md) is the runbook for
+Alibaba Cloud ECS, which has not been deployed to yet.
 
 Architecture diagram: [`architecture.svg`](architecture.svg).
