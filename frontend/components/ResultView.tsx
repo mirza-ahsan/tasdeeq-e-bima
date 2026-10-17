@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Checks } from "@/components/Checks";
 import { IconCheckCircle, IconFlag, IconRestart, IconSparkle } from "@/components/icons";
 import { Ledger } from "@/components/Ledger";
@@ -23,10 +23,15 @@ function headline(result: Result): { title: string; sub: string } {
     };
   }
   if (result.risk_band === "medium") {
-    return {
-      title: "Not fully cleared",
-      sub: "Nothing here rules it out, but not every common rejection reason could be ruled out either.",
-    };
+    return result.carc
+      ? { title: "Worth a second look", sub: "A known problem raises the risk above the average claim." }
+      : {
+          title: "Not fully cleared",
+          sub: "Nothing here rules it out, but not every common rejection reason could be ruled out either.",
+        };
+  }
+  if (result.fix_first) {
+    return { title: "Low risk — fix one thing first", sub: "The claim is in good shape apart from the problem below." };
   }
   return { title: "Looks ready to submit", sub: "No common rejection trigger found in this claim." };
 }
@@ -117,6 +122,10 @@ export function ResultView({
 }) {
   const tone = BAND_TONE[result.risk_band];
   const { title, sub } = headline(result);
+  const action = result.carc ?? result.fix_first;
+  const heading = useRef<HTMLHeadingElement>(null);
+  // The verdict takes focus when it arrives, so keyboard and screen-reader users land on it.
+  useEffect(() => heading.current?.focus({ preventScroll: true }), []);
 
   return (
     <div className="space-y-6">
@@ -135,7 +144,9 @@ export function ResultView({
           </div>
 
           <div className="min-w-0">
-            <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.03em] sm:text-[34px]">{title}</h1>
+            <h1 ref={heading} tabIndex={-1} className="text-[30px] font-semibold leading-tight tracking-[-0.03em] outline-none sm:text-[34px]">
+              {title}
+            </h1>
             <p className="mt-1.5 text-[14.5px] text-ink-2">{sub}</p>
 
             <figure className="mt-6 rounded-2xl bg-surface-2 p-5">
@@ -153,12 +164,15 @@ export function ResultView({
               </figcaption>
             </figure>
 
-            {result.carc ? (
+            {action ? (
               <div className="mt-4 rounded-2xl border p-5" style={{ borderColor: `color-mix(in oklab, ${tone.mark} 35%, transparent)`, background: tone.wash }}>
                 <span className="text-[11.5px] font-semibold uppercase tracking-[0.06em]" style={{ color: tone.ink }}>
                   Do this before submitting
                 </span>
-                <p className="mt-1.5 text-[15.5px] font-medium leading-relaxed text-ink">{result.carc.staff_action}</p>
+                <p className="mt-1.5 text-[15.5px] font-medium leading-relaxed text-ink">{action.staff_action}</p>
+                {result.fix_first && (
+                  <p className="mt-1 text-[13px] text-ink-2">{result.fix_first.plain_english}</p>
+                )}
               </div>
             ) : (
               result.risk_band === "low" && (
@@ -199,19 +213,26 @@ export function ResultView({
               <p className="mt-3 text-[16px] leading-relaxed">{result.carc.plain_english}</p>
               <p className="mt-4 border-l-2 border-line-strong pl-3 font-mono text-[11.5px] leading-relaxed text-ink-3 [overflow-wrap:anywhere]">
                 {result.carc.official_description}
-                <span className="mt-1 block opacity-80">— X12 Claim Adjustment Reason Codes</span>
+                <span className="mt-1 block">— X12 Claim Adjustment Reason Codes</span>
               </p>
               {result.carc_alternatives.length > 0 && (
                 <p className="mt-4 text-[12.5px] text-ink-3">
-                  Also possible:{" "}
-                  {result.carc_alternatives.map((c) => `CARC ${c.code} (${pct(c.confidence)})`).join(", ")}
+                  Also present in this claim:{" "}
+                  {result.carc_alternatives.map((c) => `CARC ${c.code} (${c.plain_english.replace(/\.$/, "").toLowerCase()})`).join("; ")}
                 </p>
               )}
             </>
+          ) : result.fix_first ? (
+            <p className="mt-3 text-[14px] leading-relaxed text-ink-2">
+              None: the claim is low risk. The one problem found —{" "}
+              {result.fix_first.plain_english.replace(/\.$/, "").toLowerCase()} (CARC{" "}
+              {result.fix_first.code}) — is worth fixing anyway, and is shown above.
+            </p>
           ) : (
             <p className="mt-3 text-[14px] leading-relaxed text-ink-2">
-              None shown. The reason model is trained only on rejected claims, so naming a
-              rejection reason for a claim that looks clean would be inventing a problem.
+              {result.risk_band === "low"
+                ? "None shown. No known rejection trigger was found, and naming a reason for a claim that looks clean would be inventing a problem."
+                : "None named. No specific defect was found in what was answered, and the tool names a reason only when the claim actually shows one."}
             </p>
           )}
         </section>

@@ -104,6 +104,8 @@ export interface Result {
   other_points: number;
   carc: Carc | null;
   carc_alternatives: Carc[];
+  /** A low-risk claim that still has a known defect: what to fix before submitting. */
+  fix_first: Carc | null;
   explanation: { text: string; source: "qwen" | "fallback"; model: string | null };
   patient: Patient;
   claim: Field[];
@@ -139,6 +141,7 @@ export interface Meta {
     claims: number;
     bands: Record<RiskBand, BandSummary>;
     rejections_flagged: number;
+    mean_questions: number;
     mean_questions_approved: number;
     mean_questions_rejected: number;
     distinct_question_orders: number;
