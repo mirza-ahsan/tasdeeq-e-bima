@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { IconArrowLeft, IconArrowRight, IconShield } from "@/components/icons";
 import { pkr } from "@/lib/format";
-import { parseWhole } from "@/lib/numbers";
+import { parseWhole, regroupAmount } from "@/lib/numbers";
 import type { Intake as IntakeValues, Meta } from "@/lib/types";
 
 /**
@@ -206,11 +206,17 @@ export function Intake({
                 inputMode="numeric"
                 value={amount}
                 onChange={(e) => {
-                  const raw = e.target.value.slice(0, 12);
-                  // Regroup a clean number as it is typed; leave anything else as typed so
-                  // the clerk sees what was wrong with it.
-                  const n = parseWhole(raw);
-                  setAmount(n !== null ? n.toLocaleString("en-US") : raw);
+                  const input = e.target;
+                  const raw = input.value.slice(0, 12);
+                  const next = regroupAmount(amount, raw);
+                  setAmount(next);
+                  if (next === raw) return;
+                  // Regrouping rewrites the value, which sends the caret to the end; put it
+                  // back after the same number of digits so a mid-number edit stays put.
+                  const digits = raw.slice(0, input.selectionStart ?? raw.length).replace(/\D/g, "").length;
+                  let at = 0;
+                  for (let seen = 0; at < next.length && seen < digits; at++) if (/\d/.test(next[at])) seen++;
+                  requestAnimationFrame(() => input.setSelectionRange(at, at));
                 }}
                 placeholder={proc ? proc.typical_amount_pkr.toLocaleString("en-US") : "0"}
                 aria-invalid={amount !== "" && !amountOk}
