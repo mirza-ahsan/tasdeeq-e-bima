@@ -23,6 +23,8 @@ const nextConfig: NextConfig = {
   // Required by frontend/Dockerfile: emits a self-contained server bundle.
   output: "standalone",
   poweredByHeader: false,
+  // `next dev` serves localhost; without this, opening 127.0.0.1 gives a page that never hydrates.
+  allowedDevOrigins: ["127.0.0.1"],
   async headers() {
     return [
       {
