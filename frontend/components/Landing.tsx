@@ -33,11 +33,20 @@ function Specimen() {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [shown, setShown] = useState(0);
 
+  // Retried until the API answers, so a page opened before the API came up recovers.
   useEffect(() => {
-    fetch("/api/demo/risky/preview", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setPreview)
-      .catch(() => setPreview(null));
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const load = () =>
+      fetch("/api/demo/risky/preview", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+        .then((p: Preview) => !cancelled && setPreview(p))
+        .catch(() => { if (!cancelled) timer = setTimeout(load, 5000); });
+    load();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, []);
 
   // Reveal one step at a time, as the loop did.
@@ -239,9 +248,11 @@ export function Landing({
               <IconAlert size={18} className="mt-0.5 shrink-0" />
               <span>
                 {error}
-                <span className="mt-1 block text-[12.5px] opacity-80">
-                  Locally: <code className="font-mono">uv run uvicorn backend.main:app --port 8000</code>
-                </span>
+                {process.env.NODE_ENV === "development" && (
+                  <span className="mt-1 block text-[12.5px]">
+                    Locally: <code className="font-mono">uv run uvicorn backend.main:app --port 8000</code>
+                  </span>
+                )}
               </span>
             </div>
           )}
@@ -270,7 +281,7 @@ export function Landing({
             detail={`Ranks rejected claims above accepted ones. 0.5 is guessing.`}
           />
           <Stat
-            value={v ? pct(1 - (v.bands.low.rejection_rate ?? 0)) : "—"}
+            value={v && v.bands.low.rejection_rate !== null ? pct(1 - v.bands.low.rejection_rate) : "—"}
             label="of cleared claims were accepted"
             detail={v ? `${pct(v.bands.low.share)} of claims were cleared as low risk.` : ""}
           />
@@ -280,7 +291,7 @@ export function Landing({
             detail="Marked high risk or not cleared before submission."
           />
           <Stat
-            value={v ? ((v.mean_questions_approved + v.mean_questions_rejected) / 2).toFixed(1) : "—"}
+            value={v ? v.mean_questions.toFixed(1) : "—"}
             label="questions on average"
             detail={v ? `Never fewer than ${meta?.min_questions}; ${v.distinct_question_orders} different question orders.` : ""}
           />

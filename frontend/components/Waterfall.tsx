@@ -102,7 +102,6 @@ export function Waterfall({
                     left: at(lo),
                     width: `max(${at(width)}, 3px)`,
                     background: color[r.kind],
-                    opacity: r.kind === "total" ? 0.55 : 1,
                   }}
                 />
                 <span
