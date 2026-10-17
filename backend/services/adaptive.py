@@ -391,15 +391,15 @@ def validate_answer(feature: str, value: object, predictor: Predictor) -> object
         return value
 
     if feature in NUMBER_LIMITS:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise InvalidAnswer(f"{label} must be a whole number.")
-        if isinstance(value, float) and not value.is_integer():
+        # Integers only, as at intake: 4.0 is refused here just as 44.0 is there.
+        if isinstance(value, bool) or not isinstance(value, int):
             raise InvalidAnswer(f"{label} must be a whole number.")
         lo, hi = NUMBER_LIMITS[feature]
         if not lo <= value <= hi:
-            unit = NUMBER_UNITS.get(feature, "")
-            raise InvalidAnswer(f"{label} must be between {lo:,} and {hi:,} {unit}.".rstrip(" ."))
-        return int(value)
+            unit = NUMBER_UNITS.get(feature)
+            raise InvalidAnswer(f"{label} must be between {lo:,} and {hi:,}"
+                                f"{f' {unit}' if unit else ''}.")
+        return value
 
     if feature not in CATEGORICAL_FEATURES:
         raise InvalidAnswer(f"{label} cannot be answered here.")

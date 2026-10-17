@@ -41,9 +41,10 @@ from backend.schemas import (AnswerRequest, BandsOut, CarcOut, ChangeOut, CheckO
                              FieldOut, HealthOut, MetaOut, OptionOut, PatientOut,
                              PreviewOut, PreviewPoint, ProcedureOption, QuestionOut,
                              ResultOut, StartRequest, StepOut)
-from backend.services.adaptive import (MAX_QUESTIONS, MIN_QUESTIONS, NUMBER_LIMITS,
-                                       VALUE_LABELS, AdaptiveEngine, InvalidAnswer, Step,
-                                       feature_label, validate_answer, value_label)
+from backend.services.adaptive import (FEATURE_LABELS, MAX_QUESTIONS, MIN_QUESTIONS,
+                                       NUMBER_LIMITS, VALUE_LABELS, AdaptiveEngine,
+                                       InvalidAnswer, Step, feature_label, validate_answer,
+                                       value_label)
 from backend.services.checks import build_checks
 from backend.services.explain_qwen import ClaimPrediction, FlaggedField, explain
 from ml.features import ASKABLE_FEATURES, BILL_FEATURES, CONTEXT_FEATURES, defect_codes
@@ -176,9 +177,11 @@ def invalid_request(_: Request, exc: RequestValidationError) -> JSONResponse:
         reason = ("must be a whole number" if kind.startswith("int_")
                   else "is not one of the listed options" if kind == "literal_error"
                   else "is required" if kind == "missing"
+                  else "is too long" if kind == "string_too_long"
                   else "must be text" if kind.startswith("string_")
                   else "is not valid")
-        message = f"{field.replace('_', ' ').capitalize()} {reason}."
+        name = FEATURE_LABELS.get(field) or field.replace("_", " ").capitalize()
+        message = f"{name} {reason}."
     return JSONResponse(status_code=422, content={"detail": message})
 
 # Built on first use rather than at import, so a missing model directory leaves the app
