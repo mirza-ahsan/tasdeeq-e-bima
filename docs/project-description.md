@@ -49,7 +49,7 @@ three questions, never after eight.
 
 This is the part that is genuinely different. Insurance chatbots that do adaptive intake
 generally run a decision tree; this is information-theoretic. Across 362 held-out claims it
-used **52 different question orders**, and the first question alone depends on the bill.
+used **55 different question orders**, and the first question alone depends on the bill.
 Where a procedure needs pre-authorisation, that is always asked first: a one-step
 information-gain calculation cannot see that the procedure is what makes pre-authorisation
 matter, so the rule is structural rather than left to chance.
@@ -78,12 +78,12 @@ On a held-out test split of 362 claims, used once, for this report:
 | | |
 |---|---|
 | ROC AUC | **0.849** fully answered (0.763 with questions still open) |
-| Cleared as low risk | 62% of claims — 89% of them were accepted |
+| Cleared as low risk | 63% of claims — 89% of them were accepted |
 | Flagged high risk | 26% of claims — 56% of them were rejected (base rate 24%) |
 | Rejections flagged in advance | 72% |
 | Accuracy at the high-risk line | 81.8% — against a 76.2% "approve everything" baseline |
-| Questions per check | 3.4 for accepted claims, 3.6 for rejected |
-| CARC reason code | 88% top-1 across 12 codes (random: 8%) |
+| Questions per check | 3.6 for accepted claims, 3.7 for rejected |
+| CARC reason code | 83% top-1 across 13 codes (random: 8%) |
 
 The verdict thresholds were not chosen by hand. They were fitted on a separate validation split
 by simulating the real question loop, under written constraints: a "low" verdict must be right
@@ -104,7 +104,7 @@ nothing:
 - **Synthea**, the open-source clinical simulator from MITRE, generates the patient records.
   Diagnoses and procedures follow real care pathways and carry real SNOMED CT codes. The
   bundle is pinned by checksum, and the dataset builds byte-for-byte from it.
-- **X12 CARC codes** supply the rejection vocabulary. All twelve codes we use were verified
+- **X12 CARC codes** supply the rejection vocabulary. All thirteen codes we use were verified
   against the official published list.
 
 What is ours is the labelling: a probabilistic rules engine that maps believable claim defects

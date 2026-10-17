@@ -82,7 +82,11 @@ IMPLEMENTATION_PLAN.md from `models/metadata.json`; re-check the demo claims in
    `derive_frame` and `prepare`, including the explicit `__unknown__` category.
 3. **Pre-authorisation:** never offer "not required" when it was required; ask it first
    when required; imply it when not. No claim needing it may be cleared without it.
-4. **Only real CARC codes**, with official X12 wording kept verbatim.
+4. **Only real CARC codes**, with official X12 wording kept verbatim (13 codes; 6 is age,
+   7 is gender). **A reason is a fact:** the API names a code only if `defect_codes()`
+   finds that defect in the claim, and never calls a claim "ready to submit" while one is
+   present (low band → `fix_first`). tests/test_adaptive.py pins `defect_codes` to the
+   labeller's conditions on every claim.
 5. **Honest numbers.** Selection uses train (CV) and validation only; test is reported
    once. Bands must straddle the base rate, keep "low" ≥ 85% approved and "high" ≥ 50%
    rejected (ml/simulate.py). Every published figure must match metadata.json.
@@ -95,7 +99,17 @@ IMPLEMENTATION_PLAN.md from `models/metadata.json`; re-check the demo claims in
   wears a data colour. Tokens live in `app/globals.css`, light and dark both validated.
 - A band word is a verdict: below `min_questions` the panel shows "Early estimate".
 - Every number on screen comes from the API; never hardcode bands, limits or metrics.
+- Letter shortcuts only fire while focus is inside the question card; each new question,
+  editor and verdict takes focus; the page has one persistent `aria-live` region.
+- Number inputs refuse malformed values with a message — never strip characters.
 - Check layouts at 390px and 1440px, light and dark — `scrollWidth` must equal the viewport.
+
+## Security rules
+
+- Rate limits key on the client address. Behind our proxies only the **rightmost**
+  X-Forwarded-For hop is trusted (backend `client_key`, frontend `lib/visitor.ts`); the
+  leftmost entry is attacker-controlled. nginx must set or append it, never pass it raw.
+- Errors never echo submitted values (custom 422 handler); `NaN`/`Infinity` must stay 422.
 
 ## Gotchas
 

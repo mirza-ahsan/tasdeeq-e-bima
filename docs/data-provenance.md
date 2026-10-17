@@ -38,11 +38,12 @@ Real code systems carried through: **SNOMED CT** for procedures and conditions.
 ### X12 CARC codes — the rejection vocabulary
 
 Claim Adjustment Reason Codes are the real, published industry standard for why a claim was
-reduced or denied, maintained by X12. We use a 12-code subset relevant to outpatient
+reduced or denied, maintained by X12. We use a 13-code subset relevant to outpatient
 private-clinic work, stored in [`data/carc_codes.json`](../data/carc_codes.json).
 
 Every code number and its `official_description` was verified against
-<https://x12.org/codes/claim-adjustment-reason-codes> on **2026-09-05**. We do not invent reason
+<https://x12.org/codes/claim-adjustment-reason-codes> — twelve on **2026-09-05**, and CARC 7
+(added when the audit pointed out that a sex mismatch is not an age mismatch) on **2026-10-17**. We do not invent reason
 codes, and we do not paraphrase official wording and present it as official — the JSON marks
 per-field which values are X12's and which are ours.
 
@@ -115,7 +116,7 @@ targets noise.
 Two coding errors are injected by reassigning a real field rather than flipping a flag, so the
 mistake is a learnable relationship between visible fields: a diagnosis recorded against the
 wrong procedure (CARC 11), and an obstetric procedure billed for a patient it cannot apply to
-(CARC 6).
+— CARC 7 when the patient is male, CARC 6 when the age is outside 12–55.
 
 **Why the noise is 5%, not 8%.** At 8% flips plus a 2.5% base rate, a claim with no defect at
 all was still rejected about one time in ten, so no amount of questioning could certify a clean

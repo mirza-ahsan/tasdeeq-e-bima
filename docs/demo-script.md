@@ -115,12 +115,12 @@ On a result, click **This prediction is wrong**, type a short note, **Log correc
 
 | If they ask | Say |
 |---|---|
-| "Is it really adaptive?" | Yes — across 362 held-out claims it used 52 different question orders, and the first question alone depends on the bill. The two claims you just saw were asked different things. |
+| "Is it really adaptive?" | Yes — across 362 held-out claims it used 55 different question orders, and the first question alone depends on the bill. The two claims you just saw were asked different things. |
 | "What's your baseline?" | 76% of test claims were accepted, so "approve everything" scores 76%. We're at 82% at the high-risk line — but the honest numbers are AUC 0.85 and the verdicts: 89% of claims we clear are accepted, 56% of claims we flag high are rejected, against a 24% base rate. |
 | "How did you choose the thresholds?" | Not by hand. They're fitted on a validation split by simulating the actual question loop, with written constraints, and the test split is used once, for the report. |
 | "Why not deep learning?" | Published work on claim denial finds neural nets underperform trees on tabular claims. Trees also handle half-answered claims natively, which the question loop needs. |
 | "What does Qwen actually do?" | Only the last step. It receives the computed probability, the drivers, the rule-check issues and the reason code as JSON, and words them. Its reply is checked number by number before display. |
-| "How accurate is the reason code?" | 88% top-1 across 12 codes — high because our labels follow our rules consistently. Real insurers are messier; treat it as an upper bound. |
+| "How accurate is the reason code?" | 83% top-1 across 13 codes, on claims it never trained on — high because our labels follow our rules consistently, so treat it as an upper bound. And it only ever names a reason the claim actually shows. |
 | "Would this work on real data?" | The architecture would. It needs a partner clinic's real outcomes, parsed 835 remittance files, and per-insurer rule tables. That's written down. |
 | "Can it be reproduced?" | Yes: the dataset builds byte-for-byte from a checksum-pinned bundle, and CI rebuilds it weekly. |
 

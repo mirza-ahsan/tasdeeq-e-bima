@@ -46,7 +46,7 @@ dressed up as a paperwork problem.
 **Adaptive questioning, by information gain.** For every open question the engine computes the
 mutual information between its answer and the outcome, given everything known so far, by asking
 the model what the claim's risk would be under each possible answer. It asks the best one. The
-ordering changes with the claim — across 362 held-out claims we see 52 different question
+ordering changes with the claim — across 362 held-out claims we see 55 different question
 orders — and the full derivation, including the one subtlety that once made gains negative, is in
 [`backend/services/adaptive.py`](backend/services/adaptive.py).
 
@@ -57,9 +57,10 @@ orders — and the full derivation, including the one subtlety that once made ga
 - *Rule checks:* pre-authorisation requirement, filing deadline, amount against the typical
   price, plan coverage, diagnosis/procedure fit, procedure/patient fit. Deterministic readings
   of the same rule tables the training data came from ([`ml/features.py`](ml/features.py)).
-- *Reason code:* a second model, trained only on rejected claims, predicts which of 12 real X12
-  CARC codes applies. It is withheld for claims that look clean — naming a rejection reason for
-  a claim that isn't being rejected would be inventing a problem.
+- *Reason code:* a second model, trained only on rejected claims, predicts which of 13 real X12
+  CARC codes applies, choosing only among defects the claim actually shows. It never
+  names a reason the answers don't support, and a low-risk claim that still has one is
+  told what to fix first rather than called ready to submit.
 
 ## Where we landed, honestly
 
@@ -68,12 +69,12 @@ On the held-out test split (362 claims), used once, for this report:
 | | |
 |---|---|
 | ROC AUC, fully answered | **0.849** (0.763 with questions still unanswered) |
-| Claims cleared as low risk | 62% of claims — **89% of them were accepted** |
+| Claims cleared as low risk | 63% of claims — **89% of them were accepted** |
 | Claims flagged high risk | 26% of claims — **56% of them were rejected** (base rate 24%) |
 | Rejections flagged before submission | **72%** (medium or high) |
 | Accuracy at the high-risk line | 81.8%, against a 76.2% "approve everything" baseline |
-| Questions per check | 3.5 on average |
-| CARC reason code | 88% top-1 across 12 codes (random: 8%) |
+| Questions per check | 3.6 on average |
+| CARC reason code | 83% top-1 across 13 codes (random: 8%), on claims it never trained on |
 
 We report verdict quality and AUC first because accuracy flatters on imbalanced data. We hold
 accuracy in the 70–85% band on purpose: on data we labelled ourselves, a near-perfect score would
@@ -108,7 +109,7 @@ backend/     FastAPI: sessions, validation, the question engine, attribution, ru
 frontend/    Next.js: landing, intake, live check, verdict; same-origin /api proxy
 models/      committed artefacts + metadata.json (metrics, priors, bands)
 data/        CARC code table; the labelled dataset (committed)
-tests/       53 Python tests; frontend/lib/__tests__ has the UI client tests
+tests/       74 Python tests; frontend/lib/__tests__ has 12 UI client tests
 docs/        model card, provenance, demo script, deployment runbook, deck, screenshots
 ```
 
@@ -144,7 +145,7 @@ comes from the built-in template instead of Qwen. Set `API_URL` if the API isn't
 **Tests**
 
 ```bash
-uv run pytest -q                 # 53 tests, offline: never calls Qwen or touches feedback.db
+uv run pytest -q                 # 74 tests, offline: never calls Qwen or touches feedback.db
 uv run pytest -q -m live         # one real Qwen call, if .env is filled in
 cd frontend && npm run typecheck && npm run lint && npm test
 ```

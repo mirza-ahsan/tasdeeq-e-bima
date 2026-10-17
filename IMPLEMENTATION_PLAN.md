@@ -490,12 +490,12 @@ headers; frontend unit tests.
 | | |
 |---|---|
 | ROC AUC, full / partial | **0.849** / 0.763 (was 0.788 / 0.733, not reproducible) |
-| Verdicts | low 62% (89% accepted) · medium 12% · high 26% (56% rejected) |
+| Verdicts | low 63% (89% accepted) · medium 11% · high 26% (56% rejected) |
 | Rejections flagged | 72% |
 | Accuracy at the high-risk line | 81.8% vs 76.2% baseline — gate PASS |
-| Questions | 3.4 accepted / 3.6 rejected; 52 distinct orders |
-| CARC top-1 / top-3 | 88.1% / 99.3% (high because labels are rule-driven; see model card) |
-| Tests | 53 Python (+1 opt-in live), 9 frontend |
+| Questions | 3.6 accepted / 3.7 rejected; 55 distinct orders |
+| CARC top-1 / top-3 | 83.1% / 97.4% across 13 codes, on the test split (high because labels are rule-driven) |
+| Tests | 74 Python (+1 opt-in live), 12 frontend |
 
 ---
 

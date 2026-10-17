@@ -46,10 +46,10 @@ async def main(url: str, chromium: str | None) -> None:
         check = await page()
         await check.goto(url)
         await check.get_by_role("button", name="Risky example").click()
-        await check.get_by_text("This claim needs pre-authorisation").wait_for()
+        await check.get_by_role("heading", name="This claim needs pre-authorisation").wait_for()
         await check.get_by_role("button", name="Pause demo").click()
         await check.get_by_role("button", name="No, not obtained").click()
-        await check.get_by_text("raised the estimate by").wait_for()
+        await check.get_by_role("status").filter(has_text="raised the estimate by").wait_for()
         await check.wait_for_timeout(600)
         await check.screenshot(path=OUT / "check.png")
 
