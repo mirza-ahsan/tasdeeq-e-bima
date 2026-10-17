@@ -12,6 +12,27 @@ import type { Intake as IntakeValues, Meta } from "@/lib/types";
  * As the clerk types it already shows two things the tool knows: the typical price
  * for the procedure, and whether this bill needs pre-authorisation.
  */
+/**
+ * Arrow-key movement for a radiogroup: one tab stop (the selected option, else the
+ * first), arrows move and select, as the WAI-ARIA radio group pattern expects.
+ */
+function radioKeys<T>(values: T[], current: T | null, select: (v: T) => void) {
+  return (e: React.KeyboardEvent<HTMLElement>) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const i = current === null ? 0 : values.indexOf(current);
+    const next = (i + step + values.length) % values.length;
+    select(values[next]);
+    const group = e.currentTarget;
+    requestAnimationFrame(() =>
+      (group.querySelectorAll<HTMLElement>('[role="radio"]')[next])?.focus());
+  };
+}
+
+const tabStop = <T,>(value: T, current: T | null, index: number) =>
+  value === current || (current === null && index === 0) ? 0 : -1;
+
 export function Intake({
   meta,
   busy,
@@ -34,11 +55,13 @@ export function Intake({
   const [amtMin, amtMax] = meta.amount_limits;
   const proc = meta.procedures.find((p) => p.value === procedure) ?? null;
 
+  // Whole numbers only. Anything else is refused with a message, never silently stripped:
+  // "4.5" must not become 45, nor "1500.00" PKR 150,000.
   const ageNum = Number(age);
-  const amountNum = Number(amount.replace(/[,\s]/g, ""));
-  const ageOk = age !== "" && Number.isInteger(ageNum) && ageNum >= ageMin && ageNum <= ageMax;
-  const amountOk =
-    amount !== "" && Number.isInteger(amountNum) && amountNum >= amtMin && amountNum <= amtMax;
+  const amountDigits = amount.replace(/,/g, "").trim();
+  const amountNum = Number(amountDigits);
+  const ageOk = /^\d+$/.test(age) && ageNum >= ageMin && ageNum <= ageMax;
+  const amountOk = /^\d+$/.test(amountDigits) && amountNum >= amtMin && amountNum <= amtMax;
   const ready = ageOk && gender && proc && amountOk;
 
   const hint = useMemo(() => {
@@ -90,7 +113,7 @@ export function Intake({
               <input
                 inputMode="numeric"
                 value={age}
-                onChange={(e) => setAge(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                onChange={(e) => setAge(e.target.value.trim().slice(0, 6))}
                 placeholder="e.g. 44"
                 aria-invalid={age !== "" && !ageOk}
                 className="tnum h-12 w-full rounded-xl bg-transparent px-4 text-[16px] outline-none"
@@ -98,19 +121,27 @@ export function Intake({
               <span className="pr-4 text-[13px] text-ink-3">years</span>
             </div>
             {age !== "" && !ageOk && (
-              <span className="mt-1.5 block text-[12px] text-crit-ink">Between {ageMin} and {ageMax}.</span>
+              <span className="mt-1.5 block text-[12px] text-crit-ink">
+                A whole number of years, between {ageMin} and {ageMax}.
+              </span>
             )}
           </label>
 
           <div>
             <span className="text-[13px] font-medium" id="sex-label">Patient sex</span>
-            <div role="radiogroup" aria-labelledby="sex-label" className="mt-2 grid h-12 grid-cols-2 gap-1 rounded-xl bg-surface-2 p-1">
-              {(["F", "M"] as const).map((g) => (
+            <div
+              role="radiogroup"
+              aria-labelledby="sex-label"
+              onKeyDown={radioKeys<"F" | "M">(["F", "M"], gender, setGender)}
+              className="mt-2 grid h-12 grid-cols-2 gap-1 rounded-xl bg-surface-2 p-1"
+            >
+              {(["F", "M"] as const).map((g, i) => (
                 <button
                   key={g}
                   type="button"
                   role="radio"
                   aria-checked={gender === g}
+                  tabIndex={tabStop(g, gender, i)}
                   onClick={() => setGender(g)}
                   className={`rounded-[10px] text-[14px] transition ${
                     gender === g ? "bg-surface font-medium text-ink shadow-[var(--shadow-sm)]" : "text-ink-2 hover:text-ink"
@@ -126,8 +157,13 @@ export function Intake({
         {/* Procedure */}
         <div className="border-b border-line p-6 sm:p-8">
           <span id="proc-label" className="text-[13px] font-medium">Procedure billed</span>
-          <div role="radiogroup" aria-labelledby="proc-label" className="mt-3 grid gap-2 sm:grid-cols-2">
-            {meta.procedures.map((p) => {
+          <div
+            role="radiogroup"
+            aria-labelledby="proc-label"
+            onKeyDown={radioKeys(meta.procedures.map((p) => p.value), procedure, setProcedure)}
+            className="mt-3 grid gap-2 sm:grid-cols-2"
+          >
+            {meta.procedures.map((p, i) => {
               const on = procedure === p.value;
               return (
                 <button
@@ -135,6 +171,7 @@ export function Intake({
                   type="button"
                   role="radio"
                   aria-checked={on}
+                  tabIndex={tabStop(p.value, procedure, i)}
                   onClick={() => setProcedure(p.value)}
                   className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition ${
                     on
@@ -169,8 +206,11 @@ export function Intake({
                 inputMode="numeric"
                 value={amount}
                 onChange={(e) => {
-                  const digits = e.target.value.replace(/\D/g, "").slice(0, 7);
-                  setAmount(digits ? Number(digits).toLocaleString("en-US") : "");
+                  const raw = e.target.value.slice(0, 12);
+                  // Regroup a clean number as it is typed; leave anything else as typed so
+                  // the clerk sees what was wrong with it.
+                  const plain = raw.replace(/,/g, "");
+                  setAmount(/^\d+$/.test(plain) ? Number(plain).toLocaleString("en-US") : raw);
                 }}
                 placeholder={proc ? proc.typical_amount_pkr.toLocaleString("en-US") : "0"}
                 aria-invalid={amount !== "" && !amountOk}
@@ -179,7 +219,7 @@ export function Intake({
             </div>
             {amount !== "" && !amountOk && (
               <span className="mt-1.5 block text-[12px] text-crit-ink">
-                Between {pkr(amtMin)} and {pkr(amtMax)}.
+                Whole rupees, between {pkr(amtMin)} and {pkr(amtMax)}.
               </span>
             )}
           </label>
