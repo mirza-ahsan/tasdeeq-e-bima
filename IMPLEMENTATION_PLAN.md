@@ -6,6 +6,11 @@ original `plan.md` (narrative/pitch) and `claim-predictor-project-brief.md` (bui
 which have been removed from the repo. Inline `§` citations below refer back to those originals
 and are kept as provenance for where each decision came from.
 
+> **Reading order.** The summary and architecture below describe the system as it is now.
+> Phases 0–7 are the original build log, kept as written: where they mention SHAP, a tuned
+> decision threshold, 12 reason codes, `GET /api/demo/…`, training inside the Docker build, an
+> 8-slide deck or the old demo figures, **Phase 8 supersedes them**.
+
 - **Timeline:** 3–7 days, two authors (Mirza Ahsan Baig and Safee Akmal)
 - **Language:** English only (Urdu dropped; see [Deferred](#deferred--explicitly-not-building))
 - **Deployment:** local first, Alibaba Cloud as the final phase
@@ -15,11 +20,12 @@ and are kept as provenance for where each decision came from.
 
 ## The one-paragraph summary
 
-A "spell-checker for insurance claims." Clinic staff answer a handful of adaptively-chosen
-questions about a claim before submitting it. A LightGBM model returns a calibrated
-rejection probability, SHAP names the specific fields driving the risk, a second model
-predicts the most likely **real X12 CARC code**, and Qwen restates all of that as two
-sentences of plain-language advice. Three things must be genuinely real and not mocked:
+A "spell-checker for insurance claims." Clinic staff enter the bill, then answer a handful of
+adaptively-chosen questions about the claim before submitting it. A LightGBM model returns a
+calibrated rejection probability, exact Shapley attribution names the specific fields driving
+the risk, insurer-rule checks surface the policy facts, a second model names the most likely
+**real X12 CARC code** among the defects the claim actually has, and Qwen restates all of that
+as two sentences of plain-language advice. Three things must be genuinely real and not mocked:
 **the trained model, the adaptive question loop, and the Qwen call.**
 
 ---
@@ -34,13 +40,13 @@ Synthea sample CSVs ──► build_dataset.py ──► label_carc.py ──►
                                                      │ train.py                 │
                                                      │  • risk_model  (binary)  │
                                                      │  • carc_model  (multi)   │
-                                                     │  • isotonic calibration  │
-                                                     │  • SHAP TreeExplainer    │
+                                                     │  • centred isotonic      │
+                                                     │  • bands: simulate.py    │
                                                      └───────────┬──────────────┘
                                                                  ▼
    Next.js UI  ◄──── FastAPI ◄──── adaptive.py (expected information gain)
    (chat flow,        │                 │
-    risk gauge)       │                 └─► predictor.py ─► p(reject) + SHAP + CARC
+    risk gauge)       │                 └─► predictor.py ─► p(reject) + Shapley + CARC
                       │                                              │
                       └─────────────────► explain_qwen.py ◄──────────┘
                                             (DashScope / qwen-plus)
@@ -52,10 +58,10 @@ Synthea sample CSVs ──► build_dataset.py ──► label_carc.py ──►
 |---|---|
 | LightGBM, not XGBoost | Handles `NaN` natively at inference. During the adaptive loop most fields are still unanswered, so we predict on half-empty rows after every question. No imputation scaffolding needed. |
 | Trees, not a neural net | Research on claim-denial data shows NNs underperform trees here (`plan.md` §6). Also gives us attribution for free. |
-| SHAP `TreeExplainer` | Signed **per-claim** field contributions ("pre-auth missing pushed this +31 points"). Global feature importance cannot say that. |
+| Exact Shapley attribution of the calibrated probability | Signed **per-claim** field contributions that add up to the number on screen ("pre-auth missing pushed this +41 points"). Global feature importance cannot say that; the original rescaled SHAP values could explode (Phase 8). |
 | Separate CARC model | Keeps the binary risk score independently calibrated. Mirrors the "Deep Claim" reason-prediction framing. |
 | Real expected information gain, not importance ranking | Question order genuinely changes with prior answers — that is the demo moment, and it is the specific differentiator over Lemonade-style decision-tree flows (`plan.md` §6). |
-| Isotonic calibration | So "72%" is a real number a judge can trust. |
+| Centred isotonic calibration | So "67%" is a real number a judge can trust, without isotonic's flat steps freezing the gauge (Phase 8). |
 
 ---
 

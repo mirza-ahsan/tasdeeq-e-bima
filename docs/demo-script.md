@@ -128,8 +128,9 @@ On a result, click **This prediction is wrong**, type a short note, **Log correc
 
 - **Qwen unreachable** — the explanation falls back to a template automatically, and the
   caption says so. Keep going; nothing else is affected.
-- **API not running** — the masthead reads "Risk service offline — retrying", and the landing
-  page shows the start command. Restart it; the page recovers on its own.
+- **API not running** — the masthead reads "Risk service offline — retrying" and the landing
+  page says the service is not reachable (`npm run dev` also shows the start command).
+  Restart it; the page recovers on its own.
 - **"This check has expired"** — the API restarted mid-demo and lost the session. Click
   **Start again**.
 - **The risk doesn't move after an answer** — that is real: an expected answer (policy active,
