@@ -117,6 +117,23 @@ def test_answers_are_validated_before_they_reach_the_model(client):
         assert "IGNORE" not in r.text, "user text must not be echoed back"
 
 
+def test_number_answers_must_be_integers_and_errors_use_readable_names(client):
+    step = client.post("/api/session/start", json=START).json()
+    r = client.post("/api/session/start", json={**START, "claim_amount_pkr": "5000"})
+    assert r.json()["detail"] == "Claim amount must be a whole number."
+    sid = step["session_id"]
+    for _ in range(8):   # walk to a number question, if the loop asks one
+        q = step.get("question")
+        if not q:
+            break
+        if q["kind"] == "number":
+            bad = client.post(f"/api/session/{sid}/answer", json={"feature": q["feature"], "value": 4.0})
+            assert bad.status_code == 422 and bad.json()["detail"].endswith("must be a whole number.")
+            break
+        step = client.post(f"/api/session/{sid}/answer",
+                           json={"feature": q["feature"], "value": q["options"][0]["value"]}).json()
+
+
 def test_only_the_current_question_can_be_answered(client):
     step = client.post("/api/session/start", json=START).json()
     sid, current = step["session_id"], step["question"]["feature"]
@@ -345,9 +362,18 @@ def test_fallback_never_invents_a_task_for_a_clean_claim():
     "This claim has a 67% chance of rejection. Pre-authorisation was not obtained. Get it. Attach it. Then submit.",
     "- This claim has a 67% chance of rejection.\n- Obtain pre-authorisation.",
     "This claim has a 67% chance of rejection because the documents are missing. Attach them.",
+    "The rejection risk is moderate at 67% because pre-authorisation was not obtained. Obtain it.",
 ])
 def test_validator_rejects_replies_that_break_the_rules(bad):
     assert validate(bad, HIGH) is not None
+
+
+@pytest.mark.parametrize("bad", [
+    "The rejection risk is low at 27%, and nothing stands out as a problem. Review it anyway.",
+    "The rejection risk is high at 27%, and nothing stands out as a problem. Review it anyway.",
+])
+def test_a_medium_claim_is_never_described_as_low_or_high(bad):
+    assert validate(bad, MEDIUM_CLEAN) is not None
 
 
 def test_validator_accepts_numbers_from_the_payload():

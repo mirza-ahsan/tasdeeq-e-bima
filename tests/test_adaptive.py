@@ -172,3 +172,13 @@ def test_defect_rules_match_the_labeller_on_every_claim(engine, claims):
                 if code not in expected:
                     expected.append(code)
         assert defect_codes(row) == expected, f"claim {i}: {defect_codes(row)} vs {expected}"
+
+
+def test_elective_refusal_needs_a_known_non_emergency():
+    """CARC 50 is a reason only once the visit is known not to be an emergency; an
+    unanswered emergency question is not evidence that the treatment was elective."""
+    from ml.features import defect_codes
+    claim = {"procedure_category": "dental", "plan_tier": "basic"}
+    assert "50" not in defect_codes({**claim, "is_emergency": None})
+    assert "50" not in defect_codes({**claim, "is_emergency": True})
+    assert "50" in defect_codes({**claim, "is_emergency": False})
