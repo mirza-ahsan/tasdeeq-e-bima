@@ -100,11 +100,14 @@ def coverage_check(answers: dict) -> Check:
         return Check("coverage", "Plan covers it", "issue",
                      f"{plan} plans exclude {_proc(answers)}.")
     if tier == "basic" and proc in ELECTIVE_CATEGORIES:
-        if answers.get("is_emergency") is True:
+        emergency = answers.get("is_emergency")
+        if emergency is True:
             return Check("coverage", "Plan covers it", "ok",
                          f"Covered: {plan} plans accept {_proc(answers)} in an emergency.")
+        unless = "" if emergency is False else ", unless it was an emergency"
         return Check("coverage", "Plan covers it", "warn",
-                     f"{plan} plans often refuse elective {_proc(answers)} as not medically necessary.")
+                     f"{plan} plans often refuse elective {_proc(answers)} as not medically "
+                     f"necessary{unless}.")
     return Check("coverage", "Plan covers it", "ok", f"{plan} plans cover {_proc(answers)}.")
 
 

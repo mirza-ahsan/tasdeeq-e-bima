@@ -159,8 +159,10 @@ def defect_codes(row: dict) -> list[str]:
         "29": (_val(row, "days_vs_insurer_filing_limit") or 0) > 1.0,
         "109": _val(row, "provider_network_status") == "out_of_network",
         "96": tier is not None and proc in TIER_EXCLUSIONS.get(tier, ()),
+        # Only once it is known not to be an emergency: an unanswered emergency question is
+        # not evidence that the treatment was elective.
         "50": (tier == "basic" and proc in ELECTIVE_CATEGORIES
-               and _val(row, "is_emergency") not in (True, 1)),
+               and _val(row, "is_emergency") in (False, 0)),
         "16": _val(row, "documents_complete") in ("partial", "missing"),
         "11": _val(row, "diagnosis_procedure_match") == 0,
         "7": conflict and _val(row, "patient_gender") == "M",

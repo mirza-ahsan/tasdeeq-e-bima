@@ -149,7 +149,8 @@ If risk_band is "low" and there is no fix_before_submitting:
 supporting that if there is one.
 - Sentence 2: say the claim looks ready to submit. Do not invent a task.
 
-Never call a "low" claim high risk or a "high" claim low risk.
+Never describe the risk with a band other than risk_band: do not call a "medium" claim low or \
+high, a "low" claim high or moderate, or a "high" claim low or moderate.
 
 Plain English. No jargon, no markdown, no bullet points, no preamble, no greeting."""
 
@@ -221,9 +222,9 @@ _TOPICS = {
     "patient": ("age group", "patient's sex", "patient's gender", "male", "female"),
 }
 _FORBIDDEN_BY_BAND = {
-    "low": (r"\bhigh\b", r"likely to be rejected", r"\bmoderate\b"),
-    "medium": (r"\blow risk\b", r"\bhigh risk\b", r"ready to submit"),
-    "high": (r"\blow\b", r"ready to submit"),
+    "low": (r"\bhigh\b", r"likely to be rejected", r"\bmoderate\b", r"\bmedium\b"),
+    "medium": (r"\blow\b", r"\bhigh\b", r"ready to submit"),
+    "high": (r"\blow\b", r"\bmoderate\b", r"\bmedium\b", r"ready to submit"),
 }
 
 
@@ -291,6 +292,10 @@ def fallback_text(prediction: ClaimPrediction) -> str:
     if prediction.risk_band == "low":
         if reason:
             return f"The rejection risk is low at {pct}%, but {reason}. {action}"
+        if prediction.issues:   # a safety net: every rule issue maps to a reason today
+            issue = prediction.issues[0].rstrip(".")
+            return (f"The rejection risk is low at {pct}%, but "
+                    f"{issue[0].lower() + issue[1:]}; resolve it before submitting.")
         support = f", helped most by {helpers[0].label.lower()} ({helpers[0].value})" if helpers else ""
         return f"The rejection risk is low at {pct}%{support}. The claim looks ready to submit."
 
