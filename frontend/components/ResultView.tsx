@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Checks } from "@/components/Checks";
-import { IconCheckCircle, IconFlag, IconRestart, IconSparkle } from "@/components/icons";
+import { IconCheckCircle, IconFile, IconFlag, IconRestart, IconSparkle } from "@/components/icons";
 import { Ledger } from "@/components/Ledger";
+import { PrintSummary } from "@/components/PrintSummary";
 import { BAND_TONE, BandBadge } from "@/components/RiskPanel";
 import { GLOSSARY, Term } from "@/components/Term";
 import { Waterfall } from "@/components/Waterfall";
@@ -146,9 +147,21 @@ export function ResultView({
   const heading = useRef<HTMLHeadingElement>(null);
   // The verdict takes focus when it arrives, so keyboard and screen-reader users land on it.
   useEffect(() => heading.current?.focus({ preventScroll: true }), []);
+  const [generatedAt] = useState(() => new Date());
+
+  function printSummary() {
+    // The print dialog offers the page title as the PDF's file name.
+    const title = document.title;
+    const proc = result.claim.find((f) => f.feature === "procedure_category")?.value_label ?? "claim";
+    document.title = `Claim check — ${result.patient.label}, ${proc} — ${generatedAt.toISOString().slice(0, 10)}`;
+    window.addEventListener("afterprint", () => (document.title = title), { once: true });
+    window.print();
+  }
 
   return (
-    <div className="space-y-6">
+    <>
+    <PrintSummary result={result} generatedAt={generatedAt} />
+    <div className="screen-only space-y-6">
       {/* Verdict */}
       <section className="rise card overflow-hidden">
         <div className="h-1.5" style={{ background: tone.mark }} />
@@ -307,8 +320,16 @@ export function ResultView({
         >
           <IconRestart size={16} /> Check another claim
         </button>
+        <button
+          type="button"
+          onClick={printSummary}
+          className="inline-flex h-11 items-center gap-2 rounded-full border border-line-strong px-5 text-[13.5px] text-ink-2 transition hover:border-ink-3 hover:text-ink"
+        >
+          <IconFile size={15} /> Download summary (PDF)
+        </button>
         <Feedback key={result.session_id} sessionId={result.session_id} />
       </section>
     </div>
+    </>
   );
 }

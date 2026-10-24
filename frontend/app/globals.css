@@ -245,7 +245,34 @@ body {
   * { transition-duration: 1ms !important; scroll-behavior: auto !important; }
 }
 
+/* The printable check summary (components/PrintSummary.tsx). On paper it is the only
+   thing shown, in fixed black on white: the screen tokens follow the theme, paper does not. */
+.print-only { display: none; }
+
 @media print {
-  .no-print { display: none !important; }
+  @page { size: A4; margin: 12mm; }
+  :root { color-scheme: light !important; }   /* or a dark theme paints the page margins */
+  .no-print, .screen-only { display: none !important; }
+  .print-only { display: block !important; }
+  html, body, body > div { background: #fff !important; }
   .card { box-shadow: none; }
 }
+
+.print-sheet { color: #111; font-size: 9.5pt; line-height: 1.4; }
+.print-sheet .ps-head { display: flex; justify-content: space-between; border-bottom: 2px solid #111; padding-bottom: 8px; }
+.print-sheet .ps-brand { font-weight: 700; font-size: 13pt; }
+.print-sheet .ps-right { text-align: right; }
+.print-sheet .ps-muted { color: #555; }
+.print-sheet .ps-small { font-size: 8.5pt; }
+.print-sheet .ps-claim { margin: 10px 0 12px; }
+.print-sheet .ps-verdict { display: flex; gap: 18px; align-items: flex-start; border: 1px solid #bbb; border-radius: 6px; padding: 12px 14px; }
+.print-sheet .ps-pct { font-size: 30pt; font-weight: 700; line-height: 1; }
+.print-sheet .ps-title { font-size: 14pt; font-weight: 700; }
+.print-sheet .ps-quote { margin-top: 6px; font-style: italic; }
+.print-sheet .ps-box { margin-top: 10px; border: 1.5px solid #111; border-radius: 6px; padding: 10px 14px; font-weight: 600; }
+.print-sheet .ps-block { margin-top: 12px; }
+.print-sheet .ps-label { font-size: 8.5pt; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #333; margin-bottom: 4px; }
+.print-sheet .ps-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.print-sheet ul { list-style: none; padding: 0; margin: 0; }
+.print-sheet li { margin-bottom: 3px; break-inside: avoid; }
+.print-sheet .ps-foot { margin-top: 10px; border-top: 1px solid #bbb; padding-top: 8px; font-size: 8.5pt; }

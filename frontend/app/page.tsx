@@ -351,7 +351,7 @@ export default function Page() {
 
       {/* On a narrow screen the rail sits below the fold, so the reading is repeated
           as a sticky strip: the model's current opinion is never out of view. */}
-      <div className="sticky top-16 z-30 border-b border-line bg-[color-mix(in_oklab,var(--bg)_90%,transparent)] backdrop-blur-md lg:hidden">
+      <div className="no-print sticky top-16 z-30 border-b border-line bg-[color-mix(in_oklab,var(--bg)_90%,transparent)] backdrop-blur-md lg:hidden">
         <div className="mx-auto max-w-[1200px] px-4 py-3 sm:px-8">
           <RiskPanel compact probability={probability} band={band} bands={s.bands} early={early}
                      typical={s.typical_probability} base={s.base_rate} settled={settled} delta={delta} />
@@ -359,7 +359,7 @@ export default function Page() {
       </div>
 
       <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 pb-16 pt-6 sm:px-8 sm:pt-8">
-        <ClaimStrip step={s} demo={demo} onRestart={home} />
+        <div className="no-print"><ClaimStrip step={s} demo={demo} onRestart={home} /></div>
 
         {result ? (
           <div className="mt-6 space-y-4">
