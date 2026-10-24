@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { IconAlert, IconArrowRight, IconPause, IconPlay, IconSparkle } from "@/components/icons";
+import { IconAlert, IconArrowRight, IconFile, IconPause, IconPlay, IconSparkle } from "@/components/icons";
 import { GLOSSARY, Term } from "@/components/Term";
 import { parseWhole } from "@/lib/numbers";
 import type { Change, Question } from "@/lib/types";
@@ -28,6 +28,7 @@ export function QuestionCard({
   question,
   index,
   suggested,
+  suggestedBy = "demo",
   busy,
   change,
   autoplay,
@@ -38,6 +39,8 @@ export function QuestionCard({
   question: Question;
   index: number;
   suggested?: unknown;
+  /** Whose suggestion it is: the demo script's, or what the documents point to. */
+  suggestedBy?: "demo" | "documents";
   busy: boolean;
   change: Change | null;
   autoplay: boolean | null;
@@ -146,6 +149,16 @@ export function QuestionCard({
         {question.text}
       </h2>
       <p className="mt-2.5 max-w-[620px] text-[14.5px] leading-relaxed text-ink-2">{question.help_text}</p>
+      {question.evidence && (
+        <p className="mt-4 flex max-w-[620px] items-start gap-2.5 rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-[13px] leading-relaxed text-ink-2">
+          <IconFile size={15} className="mt-0.5 shrink-0 text-ink-3" />
+          <span>
+            <span className="font-medium text-ink">From the documents: </span>
+            {question.evidence}
+            {suggestedBy === "documents" && " You answer it — a document can suggest, not confirm."}
+          </span>
+        </p>
+      )}
 
       {question.kind === "choice" ? (
         <ul className="mt-7 grid gap-2.5 sm:grid-cols-2">
@@ -175,7 +188,9 @@ export function QuestionCard({
                   </kbd>
                   <span className="flex-1 text-[15px] leading-snug">{option.label}</span>
                   {isSuggested && (
-                    <span className="shrink-0 text-[11px] font-medium text-brand">Demo answer</span>
+                    <span className="shrink-0 text-[11px] font-medium text-brand">
+                      {suggestedBy === "demo" ? "Demo answer" : "Documents suggest"}
+                    </span>
                   )}
                 </button>
               </li>

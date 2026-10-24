@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { IconArrowLeft, IconArrowRight, IconShield } from "@/components/icons";
+import { DocumentReader } from "@/components/DocumentReader";
+import { IconArrowLeft, IconArrowRight, IconCheck, IconFile, IconShield } from "@/components/icons";
 import { pkr } from "@/lib/format";
 import { parseWhole, regroupAmount } from "@/lib/numbers";
-import type { Intake as IntakeValues, Meta } from "@/lib/types";
+import type { Intake as IntakeValues, Meta, Reading, ReadValue, UploadFile } from "@/lib/types";
 
 /**
  * The bill, entered once. Everything here is printed on the claim, so it is a form
@@ -34,23 +35,69 @@ function radioKeys<T>(values: T[], current: T | null, select: (v: T) => void) {
 const tabStop = <T,>(value: T, current: T | null, index: number) =>
   value === current || (current === null && index === 0) ? 0 : -1;
 
+/** Where a pre-filled value came from: neutral, never a data colour. */
+function ReadFrom({ read }: { read: ReadValue | undefined }) {
+  if (!read) return null;
+  return (
+    <span className="mt-1.5 flex items-start gap-1.5 text-[11.5px] leading-snug text-ink-3">
+      <IconFile size={12} className="mt-px shrink-0" />
+      <span>
+        Read from the documents{read.evidence ? <>: <q className="italic">{read.evidence}</q></> : null}
+      </span>
+    </span>
+  );
+}
+
 export function Intake({
   meta,
   busy,
   error,
   onBack,
   onSubmit,
+  samples,
 }: {
   meta: Meta;
   busy: boolean;
   error: string | null;
   onBack: () => void;
   onSubmit: (values: IntakeValues) => void;
+  samples?: { label: string; load: () => Promise<UploadFile[]> }[];
 }) {
   const [age, setAge] = useState("");
   const [gender, setGender] = useState<"F" | "M" | null>(null);
   const [procedure, setProcedure] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
+
+  // A reading pre-fills the form. A field stays marked as read only until the clerk
+  // changes it; the facts beyond the bill are kept unless the clerk unticks them.
+  const [reading, setReading] = useState<Reading | null>(null);
+  const [fromDoc, setFromDoc] = useState<Record<string, ReadValue>>({});
+  const [kept, setKept] = useState<Set<string>>(new Set());
+  const mine = (feature: string) =>
+    setFromDoc((d) => {
+      if (!(feature in d)) return d;
+      const rest = { ...d };
+      delete rest[feature];
+      return rest;
+    });
+
+  function applyReading(r: Reading) {
+    const byFeature = Object.fromEntries(r.context.map((c) => [c.feature, c]));
+    const v = (f: string) => byFeature[f]?.value;
+    if (typeof v("patient_age") === "number") setAge(String(v("patient_age")));
+    if (v("patient_gender") === "F" || v("patient_gender") === "M") setGender(v("patient_gender") as "F" | "M");
+    if (typeof v("procedure_category") === "string") setProcedure(v("procedure_category") as string);
+    if (typeof v("claim_amount_pkr") === "number") setAmount((v("claim_amount_pkr") as number).toLocaleString("en-US"));
+    setFromDoc(byFeature);
+    setKept(new Set(r.facts.map((f) => f.feature)));
+    setReading(r);
+  }
+
+  function clearReading() {
+    setReading(null);
+    setFromDoc({});
+    setKept(new Set());
+  }
 
   const [ageMin, ageMax] = meta.age_limits;
   const [amtMin, amtMax] = meta.amount_limits;
@@ -79,8 +126,12 @@ export function Intake({
       patient_gender: gender!,
       procedure_category: proc!.value,
       claim_amount_pkr: amountNum!,
+      ...(reading ? { reading_id: reading.reading_id, use_facts: [...kept] } : {}),
     });
   }
+
+  // Only worth a line when this bill needs approval; otherwise it is never asked.
+  const preAuthHint = hint?.needs ? reading?.hints.find((h) => h.feature === "pre_auth_obtained") : undefined;
 
   return (
     <div className="mx-auto max-w-[880px] px-4 py-10 sm:px-8 sm:py-14">
@@ -103,7 +154,36 @@ export function Intake({
         </p>
       </div>
 
-      <form onSubmit={submit} className="rise rise-1 card mt-8 overflow-hidden">
+      <div className="rise rise-1 mt-8">
+        {reading ? (
+          <div className="card flex flex-wrap items-center gap-x-4 gap-y-2 p-5 sm:px-8">
+            <IconCheck size={18} className="shrink-0 text-ink-2" />
+            <p className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-ink-2">
+              <span className="font-medium text-ink">
+                Read by Qwen{reading.model ? ` (${reading.model})` : ""}
+              </span>{" "}
+              from {reading.documents.map((d) => d.label.toLowerCase()).join(", ")}. Check each value
+              below — change anything that is wrong.
+            </p>
+            <button
+              type="button"
+              onClick={clearReading}
+              className="h-9 rounded-full px-3 text-[12.5px] text-ink-3 transition hover:bg-surface-2 hover:text-ink"
+            >
+              Use other documents
+            </button>
+            {reading.notes.length > 0 && (
+              <ul className="basis-full space-y-1 text-[12.5px] text-ink-3">
+                {reading.notes.map((n) => <li key={n}>{n}</li>)}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <DocumentReader onRead={applyReading} samples={samples} />
+        )}
+      </div>
+
+      <form onSubmit={submit} className="rise rise-2 card mt-6 overflow-hidden">
         {/* Patient */}
         <fieldset className="grid gap-6 border-b border-line p-6 sm:grid-cols-2 sm:p-8">
           <legend className="sr-only">Patient</legend>
@@ -113,7 +193,10 @@ export function Intake({
               <input
                 inputMode="numeric"
                 value={age}
-                onChange={(e) => setAge(e.target.value.trim().slice(0, 6))}
+                onChange={(e) => {
+                  setAge(e.target.value.trim().slice(0, 6));
+                  mine("patient_age");
+                }}
                 placeholder="e.g. 44"
                 aria-invalid={age !== "" && !ageOk}
                 className="tnum h-12 w-full rounded-xl bg-transparent px-4 text-[16px] outline-none"
@@ -125,6 +208,7 @@ export function Intake({
                 A whole number of years, between {ageMin} and {ageMax}.
               </span>
             )}
+            <ReadFrom read={fromDoc.patient_age} />
           </label>
 
           <div>
@@ -132,7 +216,10 @@ export function Intake({
             <div
               role="radiogroup"
               aria-labelledby="sex-label"
-              onKeyDown={radioKeys<"F" | "M">(["F", "M"], gender, setGender)}
+              onKeyDown={radioKeys<"F" | "M">(["F", "M"], gender, (g) => {
+                setGender(g);
+                mine("patient_gender");
+              })}
               className="mt-2 grid h-12 grid-cols-2 gap-1 rounded-xl bg-surface-2 p-1"
             >
               {(["F", "M"] as const).map((g, i) => (
@@ -142,7 +229,10 @@ export function Intake({
                   role="radio"
                   aria-checked={gender === g}
                   tabIndex={tabStop(g, gender, i)}
-                  onClick={() => setGender(g)}
+                  onClick={() => {
+                    setGender(g);
+                    if (g !== gender) mine("patient_gender");
+                  }}
                   className={`rounded-[10px] text-[14px] transition ${
                     gender === g ? "bg-surface font-medium text-ink shadow-[var(--shadow-sm)]" : "text-ink-2 hover:text-ink"
                   }`}
@@ -151,6 +241,7 @@ export function Intake({
                 </button>
               ))}
             </div>
+            <ReadFrom read={fromDoc.patient_gender} />
           </div>
         </fieldset>
 
@@ -160,7 +251,10 @@ export function Intake({
           <div
             role="radiogroup"
             aria-labelledby="proc-label"
-            onKeyDown={radioKeys(meta.procedures.map((p) => p.value), procedure, setProcedure)}
+            onKeyDown={radioKeys(meta.procedures.map((p) => p.value), procedure, (v) => {
+              setProcedure(v);
+              mine("procedure_category");
+            })}
             className="mt-3 grid gap-2 sm:grid-cols-2"
           >
             {meta.procedures.map((p, i) => {
@@ -172,7 +266,10 @@ export function Intake({
                   role="radio"
                   aria-checked={on}
                   tabIndex={tabStop(p.value, procedure, i)}
-                  onClick={() => setProcedure(p.value)}
+                  onClick={() => {
+                    setProcedure(p.value);
+                    if (p.value !== procedure) mine("procedure_category");
+                  }}
                   className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition ${
                     on
                       ? "border-brand bg-brand-wash"
@@ -194,6 +291,7 @@ export function Intake({
               );
             })}
           </div>
+          <ReadFrom read={fromDoc.procedure_category} />
         </div>
 
         {/* Amount */}
@@ -210,6 +308,7 @@ export function Intake({
                   const raw = input.value.slice(0, 12);
                   const next = regroupAmount(amount, raw);
                   setAmount(next);
+                  mine("claim_amount_pkr");
                   if (next === raw) return;
                   // Regrouping rewrites the value, which sends the caret to the end; put it
                   // back after the same number of digits so a mid-number edit stays put.
@@ -228,6 +327,7 @@ export function Intake({
                 Whole rupees, between {pkr(amtMin)} and {pkr(amtMax)}.
               </span>
             )}
+            <ReadFrom read={fromDoc.claim_amount_pkr} />
           </label>
 
           {hint && (
@@ -250,6 +350,57 @@ export function Intake({
                 </span>
               )}
             </div>
+          )}
+
+          {reading && (reading.facts.length > 0 || preAuthHint) && (
+            <fieldset className="mt-8 border-t border-line pt-6">
+              <legend className="sr-only">Also read from the documents</legend>
+              <span className="text-[13px] font-medium">Also read from the documents</span>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">
+                Kept facts count as answers, so the check asks fewer questions. Untick anything
+                that is wrong and it will be asked instead.
+              </p>
+              <ul className="mt-3 divide-y divide-[var(--border)] rounded-2xl border border-line">
+                {reading.facts.map((f) => {
+                  const on = kept.has(f.feature);
+                  return (
+                    <li key={f.feature}>
+                      <label className="flex cursor-pointer items-start gap-3 px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={() =>
+                            setKept((k) => {
+                              const next = new Set(k);
+                              if (on) next.delete(f.feature);
+                              else next.add(f.feature);
+                              return next;
+                            })
+                          }
+                          className="mt-1 h-4 w-4 shrink-0 accent-[var(--brand)]"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[11.5px] text-ink-3">{f.label}</span>
+                          <span className={`block text-[14px] ${on ? "" : "text-ink-3 line-through"}`}>{f.value_label}</span>
+                          {f.evidence && (
+                            <q className="mt-0.5 block text-[11.5px] italic text-ink-3">{f.evidence}</q>
+                          )}
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+                {preAuthHint && (
+                  <li className="flex items-start gap-3 px-4 py-3">
+                    <IconShield size={16} className="mt-0.5 shrink-0 text-ink-3" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[11.5px] text-ink-3">Pre-authorisation · always asked, never assumed</span>
+                      <span className="block text-[13.5px] text-ink-2">{preAuthHint.evidence}</span>
+                    </span>
+                  </li>
+                )}
+              </ul>
+            </fieldset>
           )}
 
           {error && (

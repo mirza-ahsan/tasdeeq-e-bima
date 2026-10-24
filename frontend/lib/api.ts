@@ -1,4 +1,4 @@
-import type { DemoKind, Health, Intake, Meta, Result, Step } from "./types";
+import type { DemoKind, Health, Intake, Meta, Reading, Result, Step, UploadFile } from "./types";
 
 /**
  * Typed client for the API, reached through this app's own `/api` proxy.
@@ -28,6 +28,8 @@ const FRIENDLY: Record<number, string> = {
   503: "The risk model is not available on this server.",
 };
 
+const WORDED_BY_API = new Set([400, 409, 413, 422, 503]);
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -47,12 +49,11 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       /* not JSON */
     }
-    // Validation and state messages from the API are already written for people;
-    // anything else gets a fixed sentence.
-    const message =
-      res.status === 409 || res.status === 422 || res.status === 400
-        ? detail || "That answer could not be accepted."
-        : (FRIENDLY[res.status] ?? "Something went wrong. Try again in a moment.");
+    // Validation, state and availability messages from the API are already written for
+    // people; anything else gets a fixed sentence.
+    const message = WORDED_BY_API.has(res.status)
+      ? detail || FRIENDLY[res.status] || "That could not be accepted."
+      : (FRIENDLY[res.status] ?? "Something went wrong. Try again in a moment.");
     throw new ApiError(message, res.status);
   }
   return (await res.json()) as T;
@@ -76,6 +77,9 @@ export const api = {
     }),
 
   result: (sessionId: string) => call<Result>(`/session/${sessionId}/result`),
+
+  readDocuments: (files: UploadFile[]) =>
+    call<Reading>("/documents/read", { method: "POST", body: JSON.stringify({ files }) }),
 
   feedback: (sessionId: string, note?: string) =>
     call<{ ok: boolean; logged_id: number }>("/feedback", {

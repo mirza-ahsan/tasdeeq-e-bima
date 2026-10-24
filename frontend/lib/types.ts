@@ -18,6 +18,9 @@ export interface Question {
   min_value: number | null;
   max_value: number | null;
   expected_info_gain: number;
+  /** What the uploaded documents say about this question. A suggestion only. */
+  evidence?: string | null;
+  suggested?: unknown;
 }
 
 export interface Field {
@@ -26,7 +29,9 @@ export interface Field {
   value: unknown;
   value_label: string;
   contribution_points: number;
-  source: "bill" | "answer";
+  source: "bill" | "answer" | "document";
+  /** The quote a "document" field was read from. */
+  evidence?: string | null;
 }
 
 export interface Patient {
@@ -72,6 +77,9 @@ export interface Step {
   answered: Field[];
   checks: Check[];
   last_change: Change | null;
+  /** How to change an answer read from the documents (no question was asked for it). */
+  document_questions: Question[];
+  documents: DocumentInfo[];
 }
 
 export interface Driver {
@@ -111,6 +119,40 @@ export interface Result {
   claim: Field[];
   answered: Field[];
   checks: Check[];
+  documents: DocumentInfo[];
+}
+
+export interface DocumentInfo {
+  index: number;
+  type: string;
+  label: string;
+}
+
+export interface ReadValue {
+  feature: string;
+  label: string;
+  value: unknown;
+  value_label: string;
+  evidence: string;
+  document: number | null;
+}
+
+export interface Reading {
+  reading_id: string;
+  /** The bill: pre-fills the form. */
+  context: ReadValue[];
+  /** Printed facts the clerk can keep as answers. */
+  facts: ReadValue[];
+  /** Suggestions for questions that are still asked. */
+  hints: ReadValue[];
+  documents: DocumentInfo[];
+  notes: string[];
+  model: string | null;
+}
+
+export interface UploadFile {
+  name: string;
+  data: string;
 }
 
 export interface ProcedureOption {
@@ -160,6 +202,9 @@ export interface Intake {
   patient_gender: "M" | "F";
   procedure_category: string;
   claim_amount_pkr: number;
+  /** Starting from read documents: the reading, and the facts the clerk kept. */
+  reading_id?: string;
+  use_facts?: string[];
 }
 
 export type DemoKind = "risky" | "clean";

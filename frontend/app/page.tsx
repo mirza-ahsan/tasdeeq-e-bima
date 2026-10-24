@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Checks } from "@/components/Checks";
-import { IconAlert, IconRestart } from "@/components/icons";
+import { IconAlert, IconFile, IconRestart } from "@/components/icons";
 import { Intake } from "@/components/Intake";
 import { Landing } from "@/components/Landing";
 import { Ledger } from "@/components/Ledger";
@@ -25,6 +25,11 @@ function billSummary(step: Step) {
   return step.claim.map((f) => f.value_label).join(" · ");
 }
 
+/** Answers read from the documents, rather than asked. */
+const fromDocuments = (step: Step) => step.answered.filter((a) => a.source === "document").length;
+/** Questions actually put to the clerk. */
+const asked = (step: Step) => step.n_answered - fromDocuments(step);
+
 function ClaimStrip({ step, demo, onRestart }: { step: Step; demo: DemoKind | null; onRestart: () => void }) {
   const proc = step.claim.find((f) => f.feature === "procedure_category");
   const amount = step.claim.find((f) => f.feature === "claim_amount_pkr");
@@ -42,6 +47,11 @@ function ClaimStrip({ step, demo, onRestart }: { step: Step; demo: DemoKind | nu
           {typeof amount.value === "number" ? pkr(amount.value) : amount.value_label}
         </span>
       )}
+      {step.documents.length > 0 && (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 text-[12.5px] text-ink-2">
+          <IconFile size={13} /> Read from {step.documents.length === 1 ? "1 document" : `${step.documents.length} documents`}
+        </span>
+      )}
       <button
         type="button"
         onClick={onRestart}
@@ -55,10 +65,11 @@ function ClaimStrip({ step, demo, onRestart }: { step: Step; demo: DemoKind | nu
 
 function Progress({ step, settled }: { step: Step; settled: boolean }) {
   const { n_answered: n, min_questions: min, max_questions: max } = step;
+  const read = fromDocuments(step);
   return (
     <div>
       <div className="flex items-baseline justify-between">
-        <span className="eyebrow">Questions</span>
+        <span className="eyebrow">Answers</span>
         <span className="tnum text-[11.5px] text-ink-3">{n} of at most {max}</span>
       </div>
       <div className="relative mt-2.5 flex gap-[3px]" aria-hidden>
@@ -76,6 +87,7 @@ function Progress({ step, settled }: { step: Step; settled: boolean }) {
         />
       </div>
       <p className="mt-2.5 text-[12px] leading-relaxed text-ink-3">
+        {read > 0 && `${read} read from the documents. `}
         {settled
           ? "Finished."
           : n < min
@@ -131,10 +143,11 @@ export default function Page() {
 
   const remember = (s: Step) => {
     const q = s.question;
-    if (q) {
-      setQuestions((prev) => ({ ...prev, [q.feature]: q }));
-      setAnnouncement(`Question ${s.n_answered + 1}: ${q.text}`);
-    }
+    // Answers read from the documents were never asked; their questions arrive with the
+    // step so the ledger can still offer to change them.
+    const editors = Object.fromEntries((s.document_questions ?? []).map((d) => [d.feature, d]));
+    setQuestions((prev) => ({ ...prev, ...editors, ...(q ? { [q.feature]: q } : {}) }));
+    if (q) setAnnouncement(`Question ${asked(s) + 1}: ${q.text}`);
   };
 
   const finish = useCallback(async (sessionId: string) => {
@@ -166,7 +179,11 @@ export default function Page() {
       setQuestions({});
       remember(first);
       setVerdictError(null);
-      setHistory([{ tick: "Bill", label: "Bill entered", detail: billSummary(first), probability: first.probability }]);
+      setHistory([
+        first.documents.length > 0
+          ? { tick: "Docs", label: "Documents read", detail: billSummary(first), probability: first.probability }
+          : { tick: "Bill", label: "Bill entered", detail: billSummary(first), probability: first.probability },
+      ]);
       setStep(first);
       setView("check");
       window.scrollTo({ top: 0 });
@@ -198,7 +215,7 @@ export default function Page() {
       setHistory((h) => [
         ...h,
         {
-          tick: edit ? "Edit" : `Q${next.n_answered}`,
+          tick: edit ? "Edit" : `Q${asked(next)}`,
           label: edit ? `Changed ${field?.label ?? feature}` : field?.label ?? feature,
           detail: field?.value_label ?? String(value),
           probability: next.probability,
@@ -353,8 +370,9 @@ export default function Page() {
                   <QuestionCard
                     key={`${s.question.feature}-${s.n_answered}`}
                     question={s.question}
-                    index={s.n_answered + 1}
-                    suggested={script?.[s.question.feature]}
+                    index={asked(s) + 1}
+                    suggested={script ? script[s.question.feature] : (s.question.suggested ?? undefined)}
+                    suggestedBy={script ? "demo" : "documents"}
                     busy={busy}
                     change={s.last_change}
                     autoplay={script ? autoplay : null}

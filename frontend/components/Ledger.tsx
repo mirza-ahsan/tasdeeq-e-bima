@@ -144,8 +144,11 @@ export function Ledger({
         {claim.map((f) => (
           <div key={f.feature} className="flex items-center justify-between gap-4 px-4 py-3">
             <div className="min-w-0">
-              <dt className="text-[11.5px] text-ink-3">{f.label} · from the bill</dt>
+              <dt className="text-[11.5px] text-ink-3">
+                {f.label} · {f.source === "document" ? "read from the documents" : "from the bill"}
+              </dt>
               <dd className="truncate text-[14px]">{f.value_label}</dd>
+              {f.evidence && <q className="block truncate text-[11.5px] italic text-ink-3">{f.evidence}</q>}
             </div>
             <Points value={f.contribution_points} />
           </div>
@@ -157,8 +160,12 @@ export function Ledger({
             <div key={f.feature} className="px-4 py-3">
               <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
-                  <dt className="text-[11.5px] text-ink-3">{f.label}</dt>
+                  <dt className="text-[11.5px] text-ink-3">
+                    {f.label}
+                    {f.source === "document" && " · read from the documents"}
+                  </dt>
                   <dd className="truncate text-[14px]">{f.value_label}</dd>
+                  {f.evidence && <q className="block truncate text-[11.5px] italic text-ink-3">{f.evidence}</q>}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <Points value={f.contribution_points} />

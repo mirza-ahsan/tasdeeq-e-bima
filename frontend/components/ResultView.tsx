@@ -107,6 +107,13 @@ function Feedback({ sessionId }: { sessionId: string }) {
   );
 }
 
+function questionCount(result: Result) {
+  const read = result.answered.filter((a) => a.source === "document").length;
+  const asked = result.n_answered - read;
+  const q = `${asked} question${asked === 1 ? "" : "s"} asked`;
+  return read ? `${q}, ${read} answer${read === 1 ? "" : "s"} read from the documents.` : `${q}.`;
+}
+
 export function ResultView({
   result,
   questions,
@@ -252,7 +259,7 @@ export function ResultView({
             onEdit={onEdit}
           />
           <p className="mt-4 text-[12px] text-ink-3">
-            {result.n_answered} questions asked.{" "}
+            {questionCount(result)}{" "}
             {result.stop_reason ? STOP_REASON_TEXT[result.stop_reason] ?? "" : ""}
           </p>
         </section>

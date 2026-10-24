@@ -11,10 +11,14 @@ import { visitor } from "@/lib/visitor";
  */
 
 const API_URL = (process.env.API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
-// Above the API's own worst case (an 8 s Qwen call plus one retry) and below nginx's 60 s.
+// Above the API's own worst cases (an 8 s Qwen call plus one retry; a 25 s Qwen-VL read)
+// and below nginx's 60 s.
 const TIMEOUT_MS = 30_000;
-// Every request this app sends is a few hundred bytes of JSON.
+// Every request this app sends is a few hundred bytes of JSON, except a document upload:
+// up to three files of 4 MB, base64-encoded. The API enforces the per-file limits.
 const MAX_BODY_BYTES = 16_384;
+const MAX_UPLOAD_BYTES = 17_000_000;
+const UPLOAD_PATH = "documents/read";
 const ALLOWED = /^[A-Za-z0-9_\-/]+$/;
 
 export const dynamic = "force-dynamic";
@@ -31,8 +35,13 @@ async function forward(request: NextRequest, path: string[], method: "GET" | "PO
     if (!(request.headers.get("content-type") ?? "").includes("application/json")) {
       return Response.json({ detail: "Requests must be JSON." }, { status: 415 });
     }
+    const limit = joined === UPLOAD_PATH ? MAX_UPLOAD_BYTES : MAX_BODY_BYTES;
+    // Refuse a declared oversize body before reading it into memory.
+    if (Number(request.headers.get("content-length") ?? 0) > limit) {
+      return Response.json({ detail: "The request is too large." }, { status: 413 });
+    }
     body = await request.text();
-    if (body.length > MAX_BODY_BYTES) {
+    if (body.length > limit) {
       return Response.json({ detail: "The request is too large." }, { status: 413 });
     }
   }
