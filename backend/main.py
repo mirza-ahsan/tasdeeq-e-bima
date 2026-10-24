@@ -18,11 +18,13 @@ What the API guarantees, whoever calls it:
 
 from __future__ import annotations
 
+import binascii
 import json
 import logging
 import threading
 import time
 import uuid
+from base64 import b64decode
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,15 +39,18 @@ from backend.config import cors_origins, load_dashscope_config, trust_proxy_head
 from backend.demo_claims import DEMO_CLAIMS
 from backend.predictor import Attribution, get_predictor
 from backend.schemas import (AnswerRequest, BandsOut, CarcOut, ChangeOut, CheckOut,
-                             DriverOut, ExplanationOut, FeedbackRequest, FeedbackResponse,
-                             FieldOut, HealthOut, MetaOut, OptionOut, PatientOut,
-                             PreviewOut, PreviewPoint, ProcedureOption, QuestionOut,
-                             ResultOut, StartRequest, StepOut)
+                             DocumentOut, DocumentsRequest, DriverOut, ExplanationOut,
+                             FeedbackRequest, FeedbackResponse, FieldOut, HealthOut, MetaOut,
+                             OptionOut, PatientOut, PreviewOut, PreviewPoint, ProcedureOption,
+                             QuestionOut, ReadingOut, ReadValueOut, ResultOut, StartRequest,
+                             StepOut)
 from backend.services.adaptive import (FEATURE_LABELS, MAX_QUESTIONS, MIN_QUESTIONS,
                                        NUMBER_LIMITS, VALUE_LABELS, AdaptiveEngine,
-                                       InvalidAnswer, Step, feature_label, validate_answer,
-                                       value_label)
+                                       InvalidAnswer, Question, Step, feature_label,
+                                       validate_answer, value_label)
 from backend.services.checks import build_checks
+from backend.services.documents import (DocumentError, Reading, ReaderUnavailable,
+                                        ReadingStore, ReadValue, read_documents)
 from backend.services.explain_qwen import ClaimPrediction, FlaggedField, explain
 from ml.features import ASKABLE_FEATURES, BILL_FEATURES, CONTEXT_FEATURES, defect_codes
 
@@ -64,6 +69,7 @@ STARTS_PER_MINUTE = 30
 ANSWERS_PER_MINUTE = 120
 RESULTS_PER_MINUTE = 30
 FEEDBACK_PER_MINUTE = 10
+READS_PER_MINUTE = 6       # each read is a multi-image Qwen-VL call
 
 # Presentation threshold: below this, a contribution is noise and showing it misleads.
 MIN_CONTRIBUTION_POINTS = 1.0     # percentage points
@@ -80,6 +86,10 @@ class Session:
     last_change: ChangeOut | None = None
     result: tuple[str, ResultOut] | None = None         # (claim state, cached result)
     feedback: tuple[str, int] | None = None             # (claim state, logged row)
+    # Started from read documents: the reading, and which known fields are still exactly
+    # as read (an edit by the clerk makes a field theirs).
+    reading: Reading | None = None
+    from_documents: set[str] = field(default_factory=set)
     last_seen: float = field(default_factory=time.monotonic)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -157,6 +167,8 @@ start_limiter = RateLimiter(STARTS_PER_MINUTE)
 answer_limiter = RateLimiter(ANSWERS_PER_MINUTE)
 result_limiter = RateLimiter(RESULTS_PER_MINUTE)
 feedback_limiter = RateLimiter(FEEDBACK_PER_MINUTE)
+read_limiter = RateLimiter(READS_PER_MINUTE)
+readings = ReadingStore()
 
 app = FastAPI(title="Claim Rejection Risk Predictor", version=VERSION)
 app.add_middleware(CORSMiddleware, allow_origins=cors_origins(),
@@ -220,16 +232,31 @@ def _players(session: Session) -> list[str]:
     return [*BILL_FEATURES, *(f for f in session.order if session.answers.get(f) is not None)]
 
 
+def _read_value(session: Session, f: str) -> ReadValue | None:
+    if f not in session.from_documents or session.reading is None:
+        return None
+    return session.reading.context.get(f) or session.reading.facts.get(f)
+
+
 def _fields(session: Session, attribution: Attribution) -> tuple[list[FieldOut], list[FieldOut]]:
     def out(f: str, source: str) -> FieldOut:
         v = session.answers[f]
+        read = _read_value(session, f)
         return FieldOut(feature=f, label=feature_label(f), value=v,
                         value_label=value_label(f, v),
                         contribution_points=round(float(attribution.points.get(f, 0.0)), 1),
-                        source=source)
+                        source="document" if read else source,
+                        evidence=read.evidence if read else None)
     claim = [out(f, "bill") for f in BILL_FEATURES]
     answered = [out(f, "answer") for f in session.order if session.answers.get(f) is not None]
     return claim, answered
+
+
+def _documents(session: Session) -> list[DocumentOut]:
+    if session.reading is None:
+        return []
+    return [DocumentOut(index=d.index, type=d.type, label=d.label)
+            for d in session.reading.documents]
 
 
 def _patient(answers: dict) -> PatientOut:
@@ -238,15 +265,17 @@ def _patient(answers: dict) -> PatientOut:
                       label=f"{age}-year-old {value_label('patient_gender', gender).lower()}")
 
 
-def _question_out(step: Step) -> QuestionOut | None:
-    q = step.question
+def _question_out(q: Question | None, reading: Reading | None = None) -> QuestionOut | None:
     if q is None:
         return None
+    hint = reading.hints.get(q.feature) if reading else None
     return QuestionOut(
         feature=q.feature, text=q.text, help_text=q.help_text, kind=q.kind,
         options=[OptionOut(value=o.value, label=o.label) for o in q.options],
         unit=q.unit, min_value=q.min_value, max_value=q.max_value,
-        expected_info_gain=round(q.expected_info_gain, 6))
+        expected_info_gain=round(q.expected_info_gain, 6),
+        evidence=hint.evidence if hint else None,
+        suggested=hint.value if hint else None)
 
 
 def _checks(engine: AdaptiveEngine, answers: dict) -> list[CheckOut]:
@@ -269,9 +298,12 @@ def _step_out(session: Session, step: Step, engine: AdaptiveEngine) -> StepOut:
         base_rate=engine.p.meta["base_rejection_rate"],
         typical_probability=round(attribution.base_probability, 4),
         n_answered=step.n_answered, min_questions=MIN_QUESTIONS, max_questions=MAX_QUESTIONS,
-        question=_question_out(step), stop_reason=step.stop_reason,
+        question=_question_out(step.question, session.reading), stop_reason=step.stop_reason,
         patient=_patient(session.answers), claim=claim, answered=answered,
-        checks=_checks(engine, session.answers), last_change=session.last_change)
+        checks=_checks(engine, session.answers), last_change=session.last_change,
+        document_questions=[_question_out(engine.question_for(f, session.answers))
+                            for f in session.order if f in session.from_documents],
+        documents=_documents(session))
 
 
 def _carc_out(code: str, confidence: float) -> CarcOut:
@@ -296,10 +328,33 @@ def _reasons(engine: AdaptiveEngine, answers: dict, derived: dict) -> list[CarcO
     return [_carc_out(c, ranked.get(c, 0.0)) for c in present]
 
 
-def _start(answers: dict, engine: AdaptiveEngine) -> StepOut:
+def _start(answers: dict, engine: AdaptiveEngine, reading: Reading | None = None,
+           facts: list[str] = ()) -> StepOut:
     session = sessions.create(answers)
     with session.lock:
+        if reading is not None:
+            session.reading = reading
+            # The bill fields count as read only if the clerk left them as read.
+            session.from_documents = {f for f, r in reading.context.items()
+                                      if answers.get(f) == r.value}
+            for f in facts:
+                session.answers[f] = reading.facts[f].value
+                session.order.append(f)
+                session.from_documents.add(f)
         return _step_out(session, engine.next_step(session.answers), engine)
+
+
+def _reading_out(reading: Reading) -> ReadingOut:
+    def out(r: ReadValue) -> ReadValueOut:
+        return ReadValueOut(feature=r.feature, label=feature_label(r.feature), value=r.value,
+                            value_label=r.value_label, evidence=r.evidence, document=r.document)
+    return ReadingOut(
+        reading_id=reading.id, context=[out(r) for r in reading.context.values()],
+        facts=[out(r) for r in reading.facts.values()],
+        hints=[out(r) for r in reading.hints.values()],
+        documents=[DocumentOut(index=d.index, type=d.type, label=d.label)
+                   for d in reading.documents],
+        notes=reading.notes, model=reading.model)
 
 
 # --- endpoints -----------------------------------------------------------------
@@ -312,7 +367,43 @@ def start_session(req: StartRequest, request: Request) -> StepOut:
         answers = {f: validate_answer(f, getattr(req, f), engine.p) for f in CONTEXT_FEATURES}
     except InvalidAnswer as exc:
         raise HTTPException(422, str(exc))
-    return _start(answers, engine)
+    reading = None
+    if req.reading_id is not None:
+        reading = readings.get(req.reading_id)
+        if reading is None:
+            raise HTTPException(422, "The documents were read too long ago. Read them again, "
+                                     "or start without them.")
+    elif req.use_facts:
+        raise HTTPException(422, "Facts from documents need the reading they came from.")
+    facts = list(dict.fromkeys(req.use_facts))
+    if reading is not None and any(f not in reading.facts for f in facts):
+        raise HTTPException(422, "Only facts read from these documents can be kept.")
+    # In question order, so the ledger lists them the way the questions would come.
+    facts.sort(key=ASKABLE_FEATURES.index)
+    return _start(answers, engine, reading, facts)
+
+
+@app.post("/api/documents/read", response_model=ReadingOut)
+def read_claim_documents(req: DocumentsRequest, request: Request) -> ReadingOut:
+    """Read the bill and supporting documents with Qwen-VL. Returns what was read for the
+    clerk to confirm; nothing reaches a check until they start one from it."""
+    read_limiter.check(client_key(request), "documents read")
+    engine = get_engine()
+    files = []
+    for f in req.files:
+        data = f.data.split(",", 1)[1] if f.data.startswith("data:") else f.data
+        try:
+            files.append((f.name or "A document", b64decode(data, validate=True)))
+        except (binascii.Error, ValueError):
+            raise HTTPException(422, f"{f.name or 'A document'} could not be read as a file.")
+    try:
+        reading = read_documents(files, engine.p)
+    except DocumentError as exc:
+        raise HTTPException(422, str(exc))
+    except ReaderUnavailable as exc:
+        raise HTTPException(503, str(exc))
+    readings.put(reading)
+    return _reading_out(reading)
 
 
 @app.post("/api/demo/{which}", response_model=StepOut)
@@ -405,6 +496,7 @@ def submit_answer(session_id: str, req: AnswerRequest, request: Request) -> Step
 
         before = step.probability if step else engine.p.predict(session.answers)
         session.answers[req.feature] = value
+        session.from_documents.discard(req.feature)   # the clerk's answer now, not the paper's
         if not editing:
             session.order.append(req.feature)
         next_step = engine.next_step(session.answers)
@@ -475,7 +567,8 @@ def get_result(session_id: str, request: Request) -> ResultOut:
             fix_first=fix_first,
             explanation=ExplanationOut(text=explanation.text, source=explanation.source,
                                        model=explanation.model),
-            patient=_patient(answers), claim=claim, answered=answered, checks=checks)
+            patient=_patient(answers), claim=claim, answered=answered, checks=checks,
+            documents=_documents(session))
         session.result = (key, result)
         return result
 

@@ -13,6 +13,7 @@ services:
       DASHSCOPE_BASE_URL:     ${DASHSCOPE_BASE_URL:-https://dashscope-intl.aliyuncs.com/compatible-mode/v1}
       DASHSCOPE_WORKSPACE_ID: ${DASHSCOPE_WORKSPACE_ID:-}
       QWEN_MODEL:             ${QWEN_MODEL:-qwen-plus}
+      QWEN_VL_MODEL:          ${QWEN_VL_MODEL:-qwen3-vl-plus}
       # The web proxy forwards the visitor's address; per-client rate limits key on it.
       TRUST_PROXY_HEADERS:    "true"
     volumes:

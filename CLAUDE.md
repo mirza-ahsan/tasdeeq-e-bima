@@ -25,12 +25,14 @@ backend/predictor.py  model serving + exact Shapley attribution of the calibrate
 backend/services/adaptive.py      question bank, info-gain engine, stop rule, validation
 backend/services/checks.py        deterministic insurer-rule checks
 backend/services/explain_qwen.py  Qwen prompt, output validator, call budget, fallback
+backend/services/documents.py     Qwen-VL reads uploaded documents -> validated fields + evidence
 models/               committed artefacts + metadata.json (metrics, priors, bands, loop)
 data/processed/claims.parquet     committed labelled dataset (tests and evaluation use it)
 frontend/             Next.js 16 App Router + Tailwind v4 (see frontend/AGENTS.md)
 frontend/app/page.tsx state machine: landing -> intake -> check -> verdict; demo autoplay
 frontend/app/api/[...path]/route.ts  same-origin proxy to API_URL (read at request time)
-frontend/components/  RiskPanel, Trajectory, Waterfall, Ledger, Checks, QuestionCard, ...
+frontend/components/  RiskPanel, Trajectory, Waterfall, Ledger, Checks, QuestionCard,
+                      DocumentReader (upload), ...
 docs/build_deck.py    deck built from models/metadata.json + docs/screenshots/
 docs/build_pitch.py   stage pitch (docs/pitch.pdf): business case first, outside figures cited
 scripts/              fetch_synthea, check_drift (CI gate), screenshots, test_dashscope
@@ -93,6 +95,12 @@ IMPLEMENTATION_PLAN.md from `models/metadata.json`; re-check the demo claims in
    once. Bands must straddle the base rate, keep "low" ≥ 85% approved and "high" ≥ 50%
    rejected (ml/simulate.py). Every published figure must match metadata.json.
 6. **The demo survives a dead network** via the template fallback.
+7. **Documents: Qwen-VL reads, the clerk confirms.** A reading only fills fields printed
+   on the paper (patient, bill, insurer, plan, panel, diagnosis, treatment date,
+   emergency), each validated by `validate_answer` and shown with its quote; the clerk
+   keeps or drops each. Pre-authorisation is never read as an answer, only suggested, and
+   an open pre-auth question overrides every stopping rule (`AdaptiveEngine.next_step`).
+   Start requests name kept facts by feature; values come from the server's reading.
 
 ## Frontend design rules
 

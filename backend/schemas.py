@@ -25,6 +25,10 @@ class QuestionOut(BaseModel):
     min_value: int | None = None
     max_value: int | None = None
     expected_info_gain: float
+    # What the uploaded documents say about this question, when they say anything. A
+    # suggestion only: the clerk still answers it.
+    evidence: str | None = None
+    suggested: Any = None
 
 
 class FieldOut(BaseModel):
@@ -37,7 +41,8 @@ class FieldOut(BaseModel):
     # Signed percentage points (exact Shapley). Together with typical_probability these
     # add up to the current estimate.
     contribution_points: float
-    source: Literal["bill", "answer"]
+    source: Literal["bill", "answer", "document"]
+    evidence: str | None = None     # the quote it was read from, for a "document" field
 
 
 class PatientOut(BaseModel):
@@ -67,6 +72,12 @@ class ChangeOut(BaseModel):
     delta_points: float
 
 
+class DocumentOut(BaseModel):
+    index: int
+    type: str
+    label: str
+
+
 class StepOut(BaseModel):
     session_id: str
     done: bool
@@ -85,6 +96,9 @@ class StepOut(BaseModel):
     answered: list[FieldOut]        # the questions, in the order they were asked
     checks: list[CheckOut]
     last_change: ChangeOut | None = None
+    # How to change an answer that came from the documents: no question was asked for it.
+    document_questions: list[QuestionOut] = []
+    documents: list[DocumentOut] = []
 
 
 class StartRequest(BaseModel):
@@ -93,6 +107,38 @@ class StartRequest(BaseModel):
     patient_gender: Literal["M", "F"]
     procedure_category: str
     claim_amount_pkr: StrictInt
+    # Starting from read documents: which of the reading's facts the clerk kept. The
+    # values themselves come from the server's copy of the reading, never the request.
+    reading_id: str | None = Field(None, max_length=64)
+    use_facts: list[str] = Field(default_factory=list, max_length=12)
+
+
+class DocumentFileIn(BaseModel):
+    name: str = Field(max_length=120)
+    data: str = Field(max_length=5_800_000)    # base64; 4 MB of file at most
+
+
+class DocumentsRequest(BaseModel):
+    files: list[DocumentFileIn] = Field(min_length=1, max_length=3)
+
+
+class ReadValueOut(BaseModel):
+    feature: str
+    label: str
+    value: Any
+    value_label: str
+    evidence: str
+    document: int | None = None
+
+
+class ReadingOut(BaseModel):
+    reading_id: str
+    context: list[ReadValueOut]     # the bill: pre-fills the intake form
+    facts: list[ReadValueOut]       # printed facts the clerk can keep as answers
+    hints: list[ReadValueOut]       # suggestions for questions that are still asked
+    documents: list[DocumentOut]
+    notes: list[str]
+    model: str | None = None
 
 
 class AnswerRequest(BaseModel):
@@ -145,6 +191,7 @@ class ResultOut(BaseModel):
     claim: list[FieldOut]
     answered: list[FieldOut]
     checks: list[CheckOut]
+    documents: list[DocumentOut] = []
 
 
 class FeedbackRequest(BaseModel):

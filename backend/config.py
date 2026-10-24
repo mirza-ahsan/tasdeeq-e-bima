@@ -19,6 +19,7 @@ load_dotenv(_REPO_ROOT / ".env", override=False)
 
 DEFAULT_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 DEFAULT_MODEL = "qwen-plus"
+DEFAULT_VL_MODEL = "qwen3-vl-plus"
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class DashScopeConfig:
     base_url: str
     workspace_id: str | None
     model: str
+    vl_model: str = DEFAULT_VL_MODEL     # reads uploaded documents
 
     @property
     def is_configured(self) -> bool:
@@ -41,6 +43,7 @@ class DashScopeConfig:
             "DASHSCOPE_BASE_URL": self.base_url,
             "DASHSCOPE_WORKSPACE_ID": self.workspace_id or "(not set)",
             "QWEN_MODEL": self.model,
+            "QWEN_VL_MODEL": self.vl_model,
         }
 
 
@@ -58,6 +61,7 @@ def load_dashscope_config() -> DashScopeConfig:
         base_url=_clean("DASHSCOPE_BASE_URL") or DEFAULT_BASE_URL,
         workspace_id=_clean("DASHSCOPE_WORKSPACE_ID"),
         model=_clean("QWEN_MODEL") or DEFAULT_MODEL,
+        vl_model=_clean("QWEN_VL_MODEL") or DEFAULT_VL_MODEL,
     )
 
 

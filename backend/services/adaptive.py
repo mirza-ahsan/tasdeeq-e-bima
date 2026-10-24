@@ -258,6 +258,11 @@ class AdaptiveEngine:
         return Question(feature, text, help_text, "choice", options=opts,
                         expected_info_gain=gain)
 
+    def question_for(self, feature: str, answers: dict) -> Question:
+        """The question as it would be asked now, for editing an answer nobody was asked
+        for (one read from the documents)."""
+        return self._build_question(feature, 0.0, answers)
+
     # -- information gain ---------------------------------------------------
 
     def information_gains(self, answers: dict, derived: dict | None = None) -> dict[str, float]:
@@ -292,17 +297,22 @@ class AdaptiveEngine:
         n = n_answered(answers)
         p = self.p.predict(answers)
         band = self.p.risk_band(p)
+        # Answers read from documents can pass the minimum before anything is asked, so
+        # an open pre-authorisation question overrides every stopping rule: a claim that
+        # needed approval is never cleared without the clerk having answered it. In the
+        # question-only loop it is always asked first, so this never changes that loop.
+        must_ask = "pre_auth_obtained" in self.candidates(answers)
 
         # Stopping on the cap or on confidence needs no information gains, so they are
         # only computed when a question might actually be asked.
         early = stop_reason(n, band, best_gain=0.0, min_gain=self.min_gain)
-        if early in ("question_limit_reached", f"confident_{band}_risk"):
+        if early in ("question_limit_reached", f"confident_{band}_risk") and not must_ask:
             return Step(True, p, band, n, None, early)
 
         gains = self.information_gains(answers)
         best = self.choose(gains)
         reason = stop_reason(n, band, gains[best] if best else None, self.min_gain)
-        if reason:
+        if reason and not must_ask:
             return Step(True, p, band, n, None, reason)
         return Step(False, p, band, n, self._build_question(best, gains[best], answers))
 
