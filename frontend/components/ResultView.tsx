@@ -33,6 +33,13 @@ function headline(result: Result): { title: string; sub: string } {
   if (result.fix_first) {
     return { title: "Low risk — fix one thing first", sub: "The claim is in good shape apart from the problem below." };
   }
+  const open = result.unsure?.length ?? 0;
+  if (open) {
+    return {
+      title: `Low risk — confirm ${open === 1 ? "one detail" : `${open} details`} first`,
+      sub: `Nothing in what was answered points to a rejection, but ${open === 1 ? "one question was" : `${open} questions were`} left as not sure.`,
+    };
+  }
   return { title: "Looks ready to submit", sub: "No common rejection trigger found in this claim." };
 }
 
@@ -109,7 +116,7 @@ function Feedback({ sessionId }: { sessionId: string }) {
 
 function questionCount(result: Result) {
   const read = result.answered.filter((a) => a.source === "document").length;
-  const asked = result.n_answered - read;
+  const asked = result.n_answered - read + (result.unsure?.length ?? 0);
   const q = `${asked} question${asked === 1 ? "" : "s"} asked`;
   return read ? `${q}, ${read} answer${read === 1 ? "" : "s"} read from the documents.` : `${q}.`;
 }
@@ -254,6 +261,7 @@ export function ResultView({
           <Ledger
             claim={result.claim}
             answered={result.answered}
+            unsure={result.unsure}
             questions={questions}
             busy={busy}
             onEdit={onEdit}

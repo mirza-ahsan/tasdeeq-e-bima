@@ -70,10 +70,10 @@ export const api = {
 
   demoAnswers: (which: DemoKind) => call<Record<string, unknown>>(`/demo/${which}/answers`),
 
-  answer: (sessionId: string, feature: string, value: unknown) =>
+  answer: (sessionId: string, feature: string, value: unknown, notSure = false) =>
     call<Step>(`/session/${sessionId}/answer`, {
       method: "POST",
-      body: JSON.stringify({ feature, value }),
+      body: JSON.stringify(notSure ? { feature, not_sure: true } : { feature, value }),
     }),
 
   result: (sessionId: string) => call<Result>(`/session/${sessionId}/result`),

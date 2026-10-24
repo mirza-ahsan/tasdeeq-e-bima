@@ -21,6 +21,13 @@ export interface Question {
   /** What the uploaded documents say about this question. A suggestion only. */
   evidence?: string | null;
   suggested?: unknown;
+  /** "Not sure" is offered for everything except pre-authorisation. */
+  can_skip?: boolean;
+}
+
+export interface FieldRef {
+  feature: string;
+  label: string;
 }
 
 export interface Field {
@@ -80,6 +87,8 @@ export interface Step {
   /** How to change an answer read from the documents (no question was asked for it). */
   document_questions: Question[];
   documents: DocumentInfo[];
+  /** Questions left as "not sure", in the order they were asked. */
+  unsure: FieldRef[];
 }
 
 export interface Driver {
@@ -120,6 +129,7 @@ export interface Result {
   answered: Field[];
   checks: Check[];
   documents: DocumentInfo[];
+  unsure: FieldRef[];
 }
 
 export interface DocumentInfo {

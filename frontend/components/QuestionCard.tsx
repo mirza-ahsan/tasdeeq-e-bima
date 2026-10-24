@@ -35,6 +35,7 @@ export function QuestionCard({
   notice,
   onToggleAutoplay,
   onAnswer,
+  onNotSure,
 }: {
   question: Question;
   index: number;
@@ -47,6 +48,8 @@ export function QuestionCard({
   notice?: string | null;
   onToggleAutoplay: () => void;
   onAnswer: (value: unknown) => void;
+  /** Leave this question open. Absent where it may not be skipped. */
+  onNotSure?: () => void;
 }) {
   // The parent remounts this on every question, so the scripted value is initial state.
   const [text, setText] = useState<string>(() =>
@@ -240,6 +243,23 @@ export function QuestionCard({
           )}
         </form>
       )}
+
+      {onNotSure && question.can_skip !== false ? (
+        <button
+          type="button"
+          data-no-shortcuts
+          disabled={busy}
+          onClick={onNotSure}
+          className="mt-4 inline-flex h-9 items-center rounded-full px-1 text-[13px] text-ink-3 underline decoration-[var(--border-strong)] underline-offset-4 transition hover:text-ink disabled:opacity-40"
+        >
+          Not sure — skip this for now
+        </button>
+      ) : question.can_skip === false ? (
+        <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">
+          Not sure? Check the patient&apos;s file or ask the insurer — this one has to be answered
+          before the claim goes out.
+        </p>
+      ) : null}
 
       {question.kind === "choice" && (
         <p className="mt-4 hidden text-[12px] text-ink-3 sm:block">

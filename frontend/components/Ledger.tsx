@@ -5,7 +5,7 @@ import { IconCheck, IconPencil } from "@/components/icons";
 import { GLOSSARY, Term } from "@/components/Term";
 import { points as fmtPoints } from "@/lib/format";
 import { parseWhole } from "@/lib/numbers";
-import type { Field, Question } from "@/lib/types";
+import type { Field, FieldRef, Question } from "@/lib/types";
 
 /** Below this, a movement is noise and pointing at it would mislead. */
 const NOTABLE = 1;
@@ -119,12 +119,15 @@ function Editor({
 export function Ledger({
   claim,
   answered,
+  unsure = [],
   questions,
   busy,
   onEdit,
 }: {
   claim: Field[];
   answered: Field[];
+  /** Questions left as "not sure": still open, and answerable from here. */
+  unsure?: FieldRef[];
   questions: Record<string, Question>;
   busy: boolean;
   onEdit: (feature: string, value: unknown) => void;
@@ -191,6 +194,43 @@ export function Ledger({
                   onSave={(v) => {
                     setEditing(null);
                     onEdit(f.feature, v);
+                  }}
+                />
+              )}
+            </div>
+          );
+        })}
+        {unsure.map((u) => {
+          const q = questions[u.feature];
+          const isEditing = editing === u.feature;
+          return (
+            <div key={u.feature} className="px-4 py-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <dt className="text-[11.5px] text-ink-3">{u.label}</dt>
+                  <dd className="truncate text-[14px] text-ink-2">Not sure — confirm before submitting</dd>
+                </div>
+                {q && !isEditing && (
+                  <button
+                    type="button"
+                    onClick={() => setEditing(u.feature)}
+                    disabled={busy}
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink disabled:opacity-40"
+                    aria-label={`Answer ${u.label}`}
+                  >
+                    <IconPencil size={14} />
+                  </button>
+                )}
+              </div>
+              {q && isEditing && (
+                <Editor
+                  question={q}
+                  current={undefined}
+                  busy={busy}
+                  onCancel={() => setEditing(null)}
+                  onSave={(v) => {
+                    setEditing(null);
+                    onEdit(u.feature, v);
                   }}
                 />
               )}

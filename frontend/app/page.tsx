@@ -34,8 +34,8 @@ function billSummary(step: Step) {
 
 /** Answers read from the documents, rather than asked. */
 const fromDocuments = (step: Step) => step.answered.filter((a) => a.source === "document").length;
-/** Questions actually put to the clerk. */
-const asked = (step: Step) => step.n_answered - fromDocuments(step);
+/** Questions actually put to the clerk, including those left as "not sure". */
+const asked = (step: Step) => step.n_answered - fromDocuments(step) + (step.unsure?.length ?? 0);
 
 function ClaimStrip({ step, demo, onRestart }: { step: Step; demo: DemoKind | null; onRestart: () => void }) {
   const proc = step.claim.find((f) => f.feature === "procedure_category");
@@ -73,18 +73,20 @@ function ClaimStrip({ step, demo, onRestart }: { step: Step; demo: DemoKind | nu
 function Progress({ step, settled }: { step: Step; settled: boolean }) {
   const { n_answered: n, min_questions: min, max_questions: max } = step;
   const read = fromDocuments(step);
+  const unsure = step.unsure?.length ?? 0;
+  const used = n + unsure;   // the cap counts every question put, answered or not
   return (
     <div>
       <div className="flex items-baseline justify-between">
         <span className="eyebrow">Answers</span>
-        <span className="tnum text-[11.5px] text-ink-3">{n} of at most {max}</span>
+        <span className="tnum text-[11.5px] text-ink-3">{used} of at most {max}</span>
       </div>
       <div className="relative mt-2.5 flex gap-[3px]" aria-hidden>
         {Array.from({ length: max }, (_, i) => (
           <span
             key={i}
             className="h-1.5 flex-1 rounded-full transition-colors duration-300"
-            style={{ background: i < n ? "var(--brand)" : "var(--surface-3)" }}
+            style={{ background: i < n ? "var(--brand)" : i < used ? "var(--ink-3)" : "var(--surface-3)" }}
           />
         ))}
         {/* the minimum before any verdict, marked on the track itself */}
@@ -95,6 +97,7 @@ function Progress({ step, settled }: { step: Step; settled: boolean }) {
       </div>
       <p className="mt-2.5 text-[12px] leading-relaxed text-ink-3">
         {read > 0 && `${read} read from the documents. `}
+        {unsure > 0 && `${unsure} marked not sure. `}
         {settled
           ? "Finished."
           : n < min
@@ -208,23 +211,24 @@ export default function Page() {
   const startDemo = (which: DemoKind) =>
     begin(() => Promise.all([api.startDemo(which), api.demoAnswers(which)]), which);
 
-  async function submit(feature: string, value: unknown, edit: boolean) {
+  async function submit(feature: string, value: unknown, edit: boolean, notSure = false) {
     if (!step) return;
-    if (edit) setAutoplay(false);   // a correction is the user taking over from the script
+    if (edit || notSure) setAutoplay(false);   // the user taking over from the script
     setBusy(true);
     setError(null);
     try {
-      const next = await api.answer(step.session_id, feature, value);
+      const next = await api.answer(step.session_id, feature, value, notSure);
       // The claim has changed on the server, so any verdict on screen is now stale.
       setResult(null);
       remember(next);
       const field = next.answered.find((a) => a.feature === feature);
+      const label = field?.label ?? next.unsure.find((u) => u.feature === feature)?.label ?? feature;
       setHistory((h) => [
         ...h,
         {
           tick: edit ? "Edit" : `Q${asked(next)}`,
-          label: edit ? `Changed ${field?.label ?? feature}` : field?.label ?? feature,
-          detail: field?.value_label ?? String(value),
+          label: edit ? `Changed ${label}` : label,
+          detail: notSure ? "Not sure" : field?.value_label ?? String(value),
           probability: next.probability,
         },
       ]);
@@ -387,6 +391,7 @@ export default function Page() {
                     notice={scriptGap}
                     onToggleAutoplay={toggleAutoplay}
                     onAnswer={(v) => submit(s.question!.feature, v, false)}
+                    onNotSure={() => submit(s.question!.feature, null, false, true)}
                   />
                 ) : verdictError ? (
                   <div className="flex flex-wrap items-center gap-4 py-8">
@@ -412,6 +417,7 @@ export default function Page() {
                 <Ledger
                   claim={s.claim}
                   answered={s.answered}
+                  unsure={s.unsure}
                   questions={questions}
                   busy={busy || autoplay}
                   onEdit={(f, v) => submit(f, v, true)}
