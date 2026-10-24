@@ -27,7 +27,7 @@ export function fileProblem(file: { name: string; type: string; size: number }):
   return null;
 }
 
-function base64(blob: Blob): Promise<string> {
+export function base64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(",", 2)[1] ?? "");

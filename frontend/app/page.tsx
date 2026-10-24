@@ -13,9 +13,16 @@ import { TopBar } from "@/components/TopBar";
 import { Trajectory, type TrajectoryPoint } from "@/components/Trajectory";
 import { ApiError, api } from "@/lib/api";
 import { pkr } from "@/lib/format";
+import { SAMPLE_SETS, loadSample, sampleUrl } from "@/lib/samples";
 import type { DemoKind, Intake as IntakeValues, Meta, Question, Result, Step } from "@/lib/types";
 
 type View = "landing" | "intake" | "check";
+
+const SAMPLES = SAMPLE_SETS.map((set) => ({
+  label: set.label,
+  previews: set.files.map(sampleUrl),
+  load: () => loadSample(set),
+}));
 
 /** Pause between scripted answers, long enough to narrate over. */
 const AUTOPLAY_MS = 1600;
@@ -301,7 +308,8 @@ export default function Page() {
         {live}
         <TopBar onHome={home} onRecover={recover} />
         <main className="flex-1">
-          <Intake meta={meta} busy={busy} error={error?.message ?? null} onBack={home} onSubmit={startIntake} />
+          <Intake meta={meta} busy={busy} error={error?.message ?? null} onBack={home} onSubmit={startIntake}
+                  samples={SAMPLES} />
         </main>
         <Footer />
       </div>

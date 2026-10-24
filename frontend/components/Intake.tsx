@@ -61,7 +61,7 @@ export function Intake({
   error: string | null;
   onBack: () => void;
   onSubmit: (values: IntakeValues) => void;
-  samples?: { label: string; load: () => Promise<UploadFile[]> }[];
+  samples?: { label: string; previews: string[]; load: () => Promise<UploadFile[]> }[];
 }) {
   const [age, setAge] = useState("");
   const [gender, setGender] = useState<"F" | "M" | null>(null);
@@ -71,6 +71,7 @@ export function Intake({
   // A reading pre-fills the form. A field stays marked as read only until the clerk
   // changes it; the facts beyond the bill are kept unless the clerk unticks them.
   const [reading, setReading] = useState<Reading | null>(null);
+  const [previews, setPreviews] = useState<(string | null)[]>([]);
   const [fromDoc, setFromDoc] = useState<Record<string, ReadValue>>({});
   const [kept, setKept] = useState<Set<string>>(new Set());
   const mine = (feature: string) =>
@@ -81,7 +82,8 @@ export function Intake({
       return rest;
     });
 
-  function applyReading(r: Reading) {
+  function applyReading(r: Reading, shown: (string | null)[]) {
+    setPreviews(shown);
     const byFeature = Object.fromEntries(r.context.map((c) => [c.feature, c]));
     const v = (f: string) => byFeature[f]?.value;
     if (typeof v("patient_age") === "number") setAge(String(v("patient_age")));
@@ -94,6 +96,8 @@ export function Intake({
   }
 
   function clearReading() {
+    for (const url of previews) if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
+    setPreviews([]);
     setReading(null);
     setFromDoc({});
     setKept(new Set());
@@ -157,7 +161,22 @@ export function Intake({
       <div className="rise rise-1 mt-8">
         {reading ? (
           <div className="card flex flex-wrap items-center gap-x-4 gap-y-2 p-5 sm:px-8">
-            <IconCheck size={18} className="shrink-0 text-ink-2" />
+            {previews.some(Boolean) ? (
+              <div className="flex shrink-0 gap-2" aria-hidden>
+                {reading.documents.map((d, i) =>
+                  previews[i] ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- a local blob or static sample
+                    <img key={d.index} src={previews[i]!} alt="" className="h-16 w-12 rounded-md border border-line object-cover object-top" />
+                  ) : (
+                    <span key={d.index} className="grid h-16 w-12 place-items-center rounded-md border border-line bg-surface-2">
+                      <IconFile size={16} className="text-ink-3" />
+                    </span>
+                  ),
+                )}
+              </div>
+            ) : (
+              <IconCheck size={18} className="shrink-0 text-ink-2" />
+            )}
             <p className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-ink-2">
               <span className="font-medium text-ink">
                 Read by Qwen{reading.model ? ` (${reading.model})` : ""}

@@ -15,9 +15,10 @@ export function DocumentReader({
   onRead,
   samples,
 }: {
-  onRead: (reading: Reading) => void;
+  /** What was read, and a preview of each document (an image URL, or null for a PDF). */
+  onRead: (reading: Reading, previews: (string | null)[]) => void;
   /** Ready-made documents for a demo, when the app ships some. */
-  samples?: { label: string; load: () => Promise<UploadFile[]> }[];
+  samples?: { label: string; previews: string[]; load: () => Promise<UploadFile[]> }[];
 }) {
   const [files, setFiles] = useState<File[]>([]);
   const [reading, setReading] = useState<string | null>(null);
@@ -36,11 +37,12 @@ export function DocumentReader({
     setFiles(next);
   }
 
-  async function read(load: () => Promise<UploadFile[]>, what: string) {
+  async function read(load: () => Promise<UploadFile[]>, what: string, previews: () => (string | null)[]) {
     setError(null);
     setReading(what);
     try {
-      onRead(await api.readDocuments(await load()));
+      const result = await api.readDocuments(await load());
+      onRead(result, previews());
       setFiles([]);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "These documents could not be prepared. Try a clearer photo or a PDF.");
@@ -131,7 +133,11 @@ export function DocumentReader({
               type="button"
               disabled={count === 0}
               onClick={() =>
-                read(() => Promise.all(files.map(prepareUpload)), count === 1 ? "1 document" : `${count} documents`)
+                read(
+                  () => Promise.all(files.map(prepareUpload)),
+                  count === 1 ? "1 document" : `${count} documents`,
+                  () => files.map((f) => (f.type.startsWith("image/") ? URL.createObjectURL(f) : null)),
+                )
               }
               className="inline-flex h-10 items-center gap-2 rounded-full bg-brand px-5 text-[13.5px] font-medium text-brand-ink transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -141,7 +147,7 @@ export function DocumentReader({
               <button
                 key={s.label}
                 type="button"
-                onClick={() => read(s.load, "the sample documents")}
+                onClick={() => read(s.load, "the sample documents", () => s.previews)}
                 className="inline-flex h-10 items-center rounded-full border border-line-strong bg-surface px-4 text-[13px] text-ink-2 transition hover:text-ink"
               >
                 {s.label}

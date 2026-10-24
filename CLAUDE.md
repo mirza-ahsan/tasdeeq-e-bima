@@ -35,7 +35,8 @@ frontend/components/  RiskPanel, Trajectory, Waterfall, Ledger, Checks, Question
                       DocumentReader (upload), ...
 docs/build_deck.py    deck built from models/metadata.json + docs/screenshots/
 docs/build_pitch.py   stage pitch (docs/pitch.pdf): business case first, outside figures cited
-scripts/              fetch_synthea, check_drift (CI gate), screenshots, test_dashscope
+scripts/              fetch_synthea, check_drift (CI gate), screenshots, test_dashscope,
+                      make_samples (fictional demo documents; dates relative to the run day)
 ```
 
 ## Commands
