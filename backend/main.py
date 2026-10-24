@@ -49,7 +49,7 @@ from backend.services.adaptive import (FEATURE_LABELS, MAX_QUESTIONS, MIN_QUESTI
                                        NUMBER_LIMITS, VALUE_LABELS, AdaptiveEngine,
                                        InvalidAnswer, Question, Step, feature_label,
                                        validate_answer, value_label)
-from backend.services.checks import build_checks, document_checks
+from backend.services.checks import blocks_submission, build_checks, document_checks
 from backend.services.documents import (DocumentError, Reading, ReaderUnavailable,
                                         ReadingStore, ReadValue, read_documents)
 from backend.services.explain_qwen import ClaimPrediction, FlaggedField, explain
@@ -70,7 +70,7 @@ STARTS_PER_MINUTE = 30
 ANSWERS_PER_MINUTE = 120
 RESULTS_PER_MINUTE = 30
 FEEDBACK_PER_MINUTE = 10
-READS_PER_MINUTE = 6       # each read is a multi-image Qwen-VL call
+READS_PER_MINUTE = 4       # each read is a multi-image Qwen-VL call
 
 # Presentation threshold: below this, a contribution is noise and showing it misleads.
 MIN_CONTRIBUTION_POINTS = 1.0     # percentage points
@@ -92,6 +92,9 @@ class Session:
     # as read (an edit by the clerk makes a field theirs).
     reading: Reading | None = None
     from_documents: set[str] = field(default_factory=set)
+    # Facts the check started with from documents. Fixed at the start: they are not
+    # answers the clerk gave, so they never count towards the minimum or the cap.
+    preset: tuple[str, ...] = ()
     last_seen: float = field(default_factory=time.monotonic)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -307,7 +310,8 @@ def _step_out(session: Session, step: Step, engine: AdaptiveEngine) -> StepOut:
         risk_band=step.risk_band, bands=_bands(engine),
         base_rate=engine.p.meta["base_rejection_rate"],
         typical_probability=round(attribution.base_probability, 4),
-        n_answered=step.n_answered, min_questions=MIN_QUESTIONS, max_questions=MAX_QUESTIONS,
+        n_answered=step.n_answered, n_asked=_asked(session),
+        min_questions=MIN_QUESTIONS, max_questions=MAX_QUESTIONS,
         question=_question_out(step.question, session.reading), stop_reason=step.stop_reason,
         patient=_patient(session.answers), claim=claim, answered=answered,
         checks=_checks(engine, session.answers, session.reading), last_change=session.last_change,
@@ -351,7 +355,17 @@ def _start(answers: dict, engine: AdaptiveEngine, reading: Reading | None = None
                 session.answers[f] = reading.facts[f].value
                 session.order.append(f)
                 session.from_documents.add(f)
-        return _step_out(session, engine.next_step(session.answers, session.skipped), engine)
+            session.preset = tuple(facts)
+        return _step_out(session, _next(engine, session), engine)
+
+
+def _next(engine: AdaptiveEngine, session: Session) -> Step:
+    return engine.next_step(session.answers, session.skipped, session.preset)
+
+
+def _asked(session: Session) -> int:
+    """Questions put to the clerk: answered or left as not sure, but not read."""
+    return sum(1 for f in session.order if f not in session.preset) + len(session.skipped)
 
 
 def _reading_out(reading: Reading) -> ReadingOut:
@@ -400,12 +414,13 @@ def read_claim_documents(req: DocumentsRequest, request: Request) -> ReadingOut:
     read_limiter.check(client_key(request), "documents read")
     engine = get_engine()
     files = []
-    for f in req.files:
+    for n, f in enumerate(req.files, 1):
         data = f.data.split(",", 1)[1] if f.data.startswith("data:") else f.data
         try:
-            files.append((f.name or "A document", b64decode(data, validate=True)))
+            files.append((f.name, b64decode(data, validate=True)))
         except (binascii.Error, ValueError):
-            raise HTTPException(422, f"{f.name or 'A document'} could not be read as a file.")
+            # Named by position: a file name can carry the patient's name or ID number.
+            raise HTTPException(422, f"Document {n} could not be read as a file.")
     try:
         reading = read_documents(files, engine.p)
     except DocumentError as exc:
@@ -504,7 +519,7 @@ def submit_answer(session_id: str, req: AnswerRequest, request: Request) -> Step
                 raise HTTPException(409, "Only the question being asked can be left as not sure.")
             before = step.probability
             session.skipped.append(req.feature)
-            next_step = engine.next_step(session.answers, session.skipped)
+            next_step = _next(engine, session)
             session.last_change = ChangeOut(
                 feature=req.feature, label=feature_label(req.feature), value_label="Not sure",
                 delta_points=round((next_step.probability - before) * 100, 1))
@@ -528,7 +543,7 @@ def submit_answer(session_id: str, req: AnswerRequest, request: Request) -> Step
         session.from_documents.discard(req.feature)   # the clerk's answer now, not the paper's
         if not editing:
             session.order.append(req.feature)
-        next_step = engine.next_step(session.answers, session.skipped)
+        next_step = _next(engine, session)
         session.last_change = ChangeOut(
             feature=req.feature, label=feature_label(req.feature),
             value_label=value_label(req.feature, value),
@@ -583,8 +598,9 @@ def get_result(session_id: str, request: Request) -> ResultOut:
             flagged_fields=[FlaggedField(label=d.label, value=d.value_label, effect=d.effect,
                                          contribution_points=d.contribution_points)
                             for d in drivers[:4]],
-            issues=[c.detail for c in checks if c.status == "issue"],
-            unconfirmed=[feature_label(f) for f in session.skipped])
+            issues=[c.detail for c in checks if blocks_submission(c)],
+            unconfirmed=[feature_label(f) for f in session.skipped],
+            too_few_answers=step.stop_reason == "too_few_answers")
         explanation = explain(prediction)
 
         result = ResultOut(
@@ -592,7 +608,7 @@ def get_result(session_id: str, request: Request) -> ResultOut:
             probability_percent=prediction.percent, risk_band=step.risk_band,
             bands=_bands(engine), base_rate=predictor.meta["base_rejection_rate"],
             typical_probability=round(attribution.base_probability, 4),
-            n_answered=step.n_answered, stop_reason=step.stop_reason,
+            n_answered=step.n_answered, n_asked=_asked(session), stop_reason=step.stop_reason,
             drivers=drivers, other_points=other, carc=carc, carc_alternatives=alternatives,
             fix_first=fix_first,
             explanation=ExplanationOut(text=explanation.text, source=explanation.source,

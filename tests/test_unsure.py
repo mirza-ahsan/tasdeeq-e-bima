@@ -72,7 +72,10 @@ def test_skipping_everything_still_ends_within_the_cap(client):
         assert turns <= MAX_QUESTIONS
     result = client.get(f"/api/session/{sid}/result").json()
     assert len(result["unsure"]) == turns
-    assert "ready to submit" not in result["explanation"]["text"].lower()
+    # Not a verdict: no band is claimed from zero answers, and Qwen is not asked to word one.
+    assert result["stop_reason"] == "too_few_answers"
+    assert result["explanation"]["text"].startswith("Too few questions were answered")
+    assert result["n_asked"] == turns
 
 
 def test_a_question_left_open_can_be_answered_later(client):
@@ -97,3 +100,11 @@ def test_an_open_question_keeps_a_low_risk_claim_from_being_called_ready():
     clear = ClaimPrediction(rejection_probability=0.12, risk_band="low", carc_code=None,
                             carc_reason=None, staff_action=None)
     assert "ready to submit" in fallback_text(clear)
+
+
+def test_every_way_of_saying_send_it_is_caught_while_something_is_open():
+    p = ClaimPrediction(rejection_probability=0.12, risk_band="low", carc_code=None,
+                        carc_reason=None, staff_action=None, unconfirmed=["Plan tier"])
+    for phrase in ("The claim is ready for submission.", "It can be submitted now.",
+                   "You are good to go.", "It is safe to submit."):
+        assert validate(f"The rejection risk is low at 12%. {phrase}", p) is not None, phrase

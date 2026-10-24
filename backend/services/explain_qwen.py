@@ -70,6 +70,8 @@ class ClaimPrediction:
     issues: list[str] = field(default_factory=list)  # failed rule checks, already worded
     # Questions the clerk answered "not sure": the claim is not ready while these are open.
     unconfirmed: list[str] = field(default_factory=list)
+    # The check ended with too few answers from the clerk to call it a verdict.
+    too_few_answers: bool = False
 
     @property
     def percent(self) -> int:
@@ -227,6 +229,11 @@ _NUMBER_WORDS = re.compile(
     r"quarters?|percent|per cent)\b", re.IGNORECASE)
 _BULLET = re.compile(r"^\s*([-*•]|\d+[.)])\s", re.MULTILINE)
 _SENTENCE_END = re.compile(r"[.!?](?=\s|$)")
+# Every way of saying "send it" a reply might use. A substring check on "ready to submit"
+# let "ready for submission" and "good to go" through.
+_READY = re.compile(r"ready (to|for) (be )?submi|can be (submitted|sent)|good to go|"
+                    r"(safe|fine|ok|okay) to (submit|send)|go ahead and (submit|send)|"
+                    r"submit it (now|as it is)")
 
 # What a reply may talk about. If it raises a topic, the payload must contain it: this is
 # what catches an invented reason ("the documents are missing") on a claim whose
@@ -246,8 +253,8 @@ _TOPICS = {
 }
 _FORBIDDEN_BY_BAND = {
     "low": (r"\bhigh\b", r"likely to be rejected", r"\bmoderate\b", r"\bmedium\b"),
-    "medium": (r"\blow\b", r"\bhigh\b", r"ready to submit"),
-    "high": (r"\blow\b", r"\bmoderate\b", r"\bmedium\b", r"ready to submit"),
+    "medium": (r"\blow\b", r"\bhigh\b", _READY.pattern),
+    "high": (r"\blow\b", r"\bmoderate\b", r"\bmedium\b", _READY.pattern),
 }
 
 
@@ -280,9 +287,9 @@ def validate(text: str, prediction: ClaimPrediction) -> str | None:
             return f"contradicts the {prediction.risk_band} band"
     if prediction.risk_band == "low" and not re.search(r"\blow\b", low):
         return "does not say the risk is low"
-    if (prediction.fix_first or prediction.issues) and "ready to submit" in low:
+    if (prediction.fix_first or prediction.issues) and _READY.search(low):
         return "calls a claim with a known problem ready to submit"
-    if prediction.unconfirmed and "ready to submit" in low:
+    if prediction.unconfirmed and _READY.search(low):
         return "calls a claim with unconfirmed details ready to submit"
     for topic, words in _TOPICS.items():
         if any(w in low for w in words) and not any(w in payload for w in words):
@@ -312,6 +319,9 @@ def _listed(labels: list[str]) -> str:
 def fallback_text(prediction: ClaimPrediction) -> str:
     """Deterministic two-sentence explanation in the same plain English as the prompt."""
     pct = prediction.percent
+    if prediction.too_few_answers:
+        return (f"Too few questions were answered for a verdict; the estimate so far is {pct}%. "
+                "Answer the questions left as not sure before submitting.")
     drivers = [f for f in prediction.flagged_fields if f.effect == "increases_risk"]
     helpers = [f for f in prediction.flagged_fields if f.effect == "reduces_risk"]
 
@@ -358,6 +368,9 @@ def explain(
     """Turn a computed prediction into two sentences of plain-language advice."""
     config = config or load_dashscope_config()
 
+    if prediction.too_few_answers:
+        # Not a verdict, so there is nothing for Qwen to word: one fixed sentence says so.
+        return Explanation(text=fallback_text(prediction), source="fallback")
     if not config.is_configured:
         logger.info("DASHSCOPE_API_KEY is not set; using template fallback.")
         return Explanation(text=fallback_text(prediction), source="fallback")

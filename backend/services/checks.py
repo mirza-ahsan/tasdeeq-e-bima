@@ -250,3 +250,10 @@ def document_checks(answers: dict, derived: dict, reading: "Reading") -> list[Ch
               same_patient_check(answers, reading),
               dates_check(reading)]
     return [c for c in checks if c is not None]
+
+
+def blocks_submission(check: Check) -> bool:
+    """Whether this check keeps a claim from being called ready to submit: any problem,
+    and a required paper missing from the uploads (a warning, since the clinic may hold
+    it, but the claim is not ready until it is attached)."""
+    return check.status == "issue" or (check.id == "doc_required" and check.status == "warn")

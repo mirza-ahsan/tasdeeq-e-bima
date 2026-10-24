@@ -203,6 +203,12 @@ def stop_reason(n_answered: int, band: str, best_gain: float | None,
     return None
 
 
+def _enough(reason: str, n_clerk: int) -> str:
+    """Only the question cap or running out of questions can end a check below the
+    minimum, and only when the clerk was not sure about most of them."""
+    return "too_few_answers" if n_clerk < MIN_QUESTIONS else reason
+
+
 def n_answered(answers: dict) -> int:
     return sum(1 for f in ASKABLE_FEATURES if answers.get(f) is not None)
 
@@ -299,13 +305,26 @@ class AdaptiveEngine:
 
     # -- the loop -----------------------------------------------------------
 
-    def next_step(self, answers: dict, skipped: tuple | list = ()) -> Step:
-        """The next question, or the verdict. `skipped` are questions the clerk was not
-        sure about: they stay unknown to the model, are not asked again, and count
-        towards the question cap (so the loop still ends) but not towards the minimum
-        number of answers a verdict needs."""
+    def next_step(self, answers: dict, skipped: tuple | list = (),
+                  preset: tuple | list | set = ()) -> Step:
+        """The next question, or the verdict.
+
+        `skipped` are questions the clerk was not sure about: they stay unknown to the
+        model, are not asked again, and count towards the question cap (so the loop still
+        ends) but not towards the minimum number of answers a verdict needs. `preset` are
+        fields read from documents: known to the model, but not answers the clerk gave, so
+        they count towards neither. Counting them let a check reach the minimum before a
+        single question, which left the low band right for only 84% of document-started
+        claims on validation, below the 85% it is fitted to (and skipped exactly the
+        questions documents cannot answer: completeness, policy status, duplicates).
+
+        A check that has to stop with fewer than the minimum answers from the clerk ends
+        as "too_few_answers": a number, but not a verdict.
+        """
         answers = {k: v for k, v in answers.items() if v is not None}
         n = n_answered(answers)
+        n_clerk = n - sum(1 for f in preset if answers.get(f) is not None)
+        asked = n_clerk + len(skipped)
         p = self.p.predict(answers)
         band = self.p.risk_band(p)
         # Answers read from documents can pass the minimum before anything is asked, so
@@ -316,17 +335,17 @@ class AdaptiveEngine:
 
         # Stopping on the cap or on confidence needs no information gains, so they are
         # only computed when a question might actually be asked.
-        early = stop_reason(n, band, best_gain=0.0, min_gain=self.min_gain)
-        if n + len(skipped) >= MAX_QUESTIONS:
+        early = stop_reason(n_clerk, band, best_gain=0.0, min_gain=self.min_gain)
+        if asked >= MAX_QUESTIONS:
             early = "question_limit_reached"
         if early in ("question_limit_reached", f"confident_{band}_risk") and not must_ask:
-            return Step(True, p, band, n, None, early)
+            return Step(True, p, band, n, None, _enough(early, n_clerk))
 
         gains = self.information_gains(answers, skipped=skipped)
         best = self.choose(gains)
-        reason = stop_reason(n, band, gains[best] if best else None, self.min_gain)
+        reason = stop_reason(n_clerk, band, gains[best] if best else None, self.min_gain)
         if reason and not must_ask:
-            return Step(True, p, band, n, None, reason)
+            return Step(True, p, band, n, None, _enough(reason, n_clerk))
         return Step(False, p, band, n, self._build_question(best, gains[best], answers))
 
     @staticmethod

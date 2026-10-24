@@ -92,7 +92,8 @@ class StepOut(BaseModel):
     bands: BandsOut
     base_rate: float
     typical_probability: float      # this patient, before the bill was entered
-    n_answered: int
+    n_answered: int                 # everything known, including facts read from documents
+    n_asked: int = 0                # questions put to the clerk, answered or not sure
     min_questions: int
     max_questions: int
     question: QuestionOut | None = None
@@ -185,6 +186,7 @@ class ResultOut(BaseModel):
     base_rate: float
     typical_probability: float
     n_answered: int
+    n_asked: int = 0
     stop_reason: str | None
     drivers: list[DriverOut]        # contributions of at least one point, largest first
     other_points: float             # the rest, so the waterfall still adds up
