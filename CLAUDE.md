@@ -102,6 +102,12 @@ IMPLEMENTATION_PLAN.md from `models/metadata.json`; re-check the demo claims in
    keeps or drops each. Pre-authorisation is never read as an answer, only suggested, and
    an open pre-auth question overrides every stopping rule (`AdaptiveEngine.next_step`).
    Start requests name kept facts by feature; values come from the server's reading.
+   Read facts are `preset`: they count towards neither `MIN_QUESTIONS` nor the cap, so a
+   verdict always rests on ≥ 3 of the clerk's own answers (counting them broke the low
+   band's 85% on validation; tests/test_documents.py pins the guarantee for this path).
+   A check that ends with < 3 clerk answers (too many "not sure") is `too_few_answers`:
+   no band word, no Qwen. Anything that blocks submission (`blocks_submission`) keeps a
+   claim from being called ready.
 
 ## Frontend design rules
 

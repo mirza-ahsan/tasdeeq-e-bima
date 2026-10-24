@@ -500,6 +500,19 @@ blocks "ready to submit" and becomes the action to take.
 **Readiness.** `scripts/test_dashscope.py` now also checks Qwen-VL on the sample bill; nginx
 needs `client_max_body_size 20m` for uploads (docs/deployment.md).
 
+**Independent review, and what it changed.** A fresh reviewer found that read facts counted
+towards the three-answer minimum, so most document-started checks reached a verdict with almost
+no questions and the low band fell to 84.3% approved on validation. Read facts now count
+towards neither the minimum nor the cap: on validation, document-started checks clear "low"
+claims 90.6% accepted and flag 74.1% of rejections (question-only: 88.9%, 68.2%), with 3.1
+questions on average; a test pins it. Also fixed: a verdict band shown after too many "not
+sure" answers (now "too few answers", no band word, no Qwen); a malformed Qwen-VL reply
+returning 500; a missing required paper not blocking "ready"; a literal-substring "ready"
+check; unbounded PDF image decoding (embedded images over 40 MP refused, budget taken before
+rendering, 3 pages, 45 s read inside a 55 s proxy wait); file names echoed in errors; 7+ digit
+runs (not dates) redacted from evidence; the proxy now counts streamed bytes; focus and
+announcements after a read; a privacy line saying pages go to Qwen on Alibaba Cloud.
+
 **Problems found during the remediation, and fixed:**
 - **Clearing a claim without asking what it was.** With information gain choosing every
   question, a minor surgery without pre-authorisation could be cleared as low risk without the

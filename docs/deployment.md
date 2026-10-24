@@ -120,9 +120,10 @@ nginx 60 s — so a stalled Qwen call ends in the template fallback, never a 504
 - Sessions are capped at 500 and expire after 30 idle minutes.
 - A result is computed once per state of a claim; viewing it again never calls Qwen.
 - Qwen calls are capped at 30 per minute across all users; past that, the template is used.
-- Document reading is capped at 6 per minute per client and 10 Qwen-VL calls per minute
-  overall; uploads are limited to 3 files of 4 MB, are never written to disk, and only the
-  extracted fields are kept, for 30 minutes.
+- Document reading is capped at 4 per minute per client and 20 Qwen-VL calls per minute
+  overall; uploads are limited to 3 files of 4 MB and 3 pages in all, are never written to
+  disk, and only the extracted fields are kept, for 30 minutes. A read can take up to 45 s;
+  the web proxy waits 55 s for it, inside nginx's 60 s.
 - `/api/health` reports only whether models loaded and whether Qwen is configured — not
   the endpoint, workspace or session count.
 

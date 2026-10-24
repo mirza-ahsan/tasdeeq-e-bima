@@ -97,11 +97,12 @@ Click **New check**, then **Check a claim**, then **Sample: surgery, approved**.
 
 *Point at the "Read from the documents" quotes and the ticked facts. Click **Start the check**.*
 
-> "Six answers came off the paper, so there's one question left — and it's pre-authorisation.
-> The letter is there, so it suggests 'yes', but a document can suggest, not confirm. That one is
-> always asked."
+> "Six facts came off the paper, so the questions it asks are the ones paper can't answer. First,
+> pre-authorisation. The letter is there, so it says so, but a document can suggest, not
+> confirm — that one is always asked. Then the things only the clerk knows: are all the papers
+> complete, has this been submitted before. The papers never replace the clerk's own three answers."
 
-Answer **Yes, obtained**. On the verdict:
+Answer **Yes, obtained**, then the tidy answers. On the verdict:
 
 > "The model says 15%, low risk. But it doesn't say 'ready to submit'. Cross-checking the papers
 > found that the approval was for 70,000 rupees and the bill is 85,000. That's exactly what the

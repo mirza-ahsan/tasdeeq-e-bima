@@ -109,7 +109,7 @@ def slides() -> list[dict]:
         dict(eyebrow="Our solution", title="A spell-checker for insurance claims", body="""
             <div class="steps">
               <div><span>1</span><b>Photograph the papers</b><p>Qwen reads them; the clerk confirms</p></div>
-              <div><span>2</span><b>Answer what they can’t</b><p>Usually one to three questions</p></div>
+              <div><span>2</span><b>Answer what they can’t</b><p>Three or four questions, chosen for this claim</p></div>
               <div><span>3</span><b>Fix before sending</b><p>Chance of rejection, the cause, the fix</p></div>
             </div>""", image="documents.png"),
 
@@ -124,7 +124,7 @@ def slides() -> list[dict]:
 
         dict(eyebrow="How it works", title="Reads the papers, asks the rest, says what to fix", body=f"""
             {ul([
-                "Fills in what is printed; asks only what the papers can’t settle",
+                "Fills in what is printed, then asks what the papers can’t settle",
                 "Cross-checks the papers: a missing approval, an approval below the bill",
                 "Risk updates after every answer; stops once settled",
                 "The cause, the official rejection code, the fix — and a one-page printout",
