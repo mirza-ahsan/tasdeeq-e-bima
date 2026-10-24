@@ -35,7 +35,7 @@ from functools import lru_cache
 
 import pypdfium2 as pdfium
 import pypdfium2.raw as pdfium_c
-from openai import OpenAI
+from openai import APIConnectionError, APITimeoutError, OpenAI
 from PIL import Image, ImageOps
 
 from backend.config import DashScopeConfig, load_dashscope_config
@@ -320,6 +320,19 @@ _budget = _CallBudget(CALLS_PER_MINUTE)
 
 
 def _call_model(config: DashScopeConfig, pages: list[tuple[int, bytes]], prompt: str) -> str:
+    """One read, retried once if the connection dropped. A dropped connection fails fast
+    and was seen in testing; a timeout is not retried, or two of them would outlast the
+    web proxy's wait."""
+    try:
+        return _call_model_once(config, pages, prompt)
+    except APIConnectionError as exc:
+        if isinstance(exc, APITimeoutError):
+            raise
+        logger.warning("Document reading connection dropped; retrying once.")
+        return _call_model_once(config, pages, prompt)
+
+
+def _call_model_once(config: DashScopeConfig, pages: list[tuple[int, bytes]], prompt: str) -> str:
     content: list[dict] = []
     for n, jpeg in pages:
         content.append({"type": "text", "text": f"File {n}:"})
