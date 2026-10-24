@@ -126,9 +126,11 @@ def test_identifying_numbers_never_survive_into_evidence(predictor):
     reply = json.loads(json.dumps(REPLY))
     reply["fields"]["patient_age"]["evidence"] = "CNIC 35202-1234567-1 Age: 44"
     reply["fields"]["insurer_tpa"]["evidence"] = "Rehnuma Insurance, call 0300 1234567"
+    reply["fields"]["plan_tier"]["evidence"] = "MR# 12345678, card 1234 5678, Plan: Standard"
     r = interpret(reply, predictor, n_files=2, today=TODAY)
     assert "1234567" not in r.context["patient_age"].evidence
     assert "1234567" not in r.facts["insurer_tpa"].evidence
+    assert "5678" not in r.facts["plan_tier"].evidence and "Standard" in r.facts["plan_tier"].evidence
     assert "02-Oct-2026" in r.facts["days_since_treatment"].evidence   # a date is not an ID
 
 
@@ -148,9 +150,36 @@ def test_photos_are_re_encoded_without_their_metadata():
 
 
 def test_pdfs_become_page_images_up_to_the_page_budget():
-    pages, notes = prepare_pages([("a.pdf", pdf(3)), ("b.pdf", pdf(3))])
-    assert [n for n, _ in pages] == [1, 1, 1, 2]
-    assert len(notes) == 1 and "b.pdf" in notes[0]
+    pages, notes = prepare_pages([("a.pdf", pdf(2)), ("b.pdf", pdf(3))])
+    assert [n for n, _ in pages] == [1, 1, 2]
+    assert len(notes) == 1 and "Document 2" in notes[0]
+
+
+def test_file_names_are_never_echoed():
+    """A file name can be "Ahmed_Khan_CNIC_35202-1234567-1.pdf"."""
+    with pytest.raises(DocumentError) as err:
+        prepare_pages([("Ahmed_Khan_CNIC.txt", b"hello there")])
+    assert "Ahmed" not in str(err.value) and "Document 1" in str(err.value)
+
+
+def test_a_pdf_holding_a_huge_image_is_refused_before_rendering():
+    out = io.BytesIO()
+    Image.new("1", (8000, 6000)).save(out, "PDF")       # 48 MP, small on disk
+    with pytest.raises(DocumentError, match="too large"):
+        prepare_pages([("scan.pdf", out.getvalue())])
+
+
+def test_a_reply_of_the_wrong_shape_ends_in_manual_entry_not_an_error(predictor, monkeypatch):
+    monkeypatch.setattr(documents, "_call_model",
+                        lambda *a: json.dumps({"documents": [{"file": 1, "type": ["bill"]}],
+                                               "fields": {"plan_tier": {"value": {"x": 1}}}}))
+    config = DashScopeConfig(api_key="test", base_url="http://qwen.invalid",
+                             workspace_id=None, model="qwen-plus")
+    reading = read_documents([("a.png", png())], predictor, config=config, today=TODAY)
+    assert reading.documents[0].type == "other" and "plan_tier" not in reading.facts
+    monkeypatch.setattr(documents, "interpret", lambda *a: 1 / 0)
+    with pytest.raises(ReaderUnavailable, match="by hand"):
+        read_documents([("a.png", png())], predictor, config=config, today=TODAY)
 
 
 @pytest.mark.parametrize("files, message", [
@@ -344,3 +373,60 @@ def test_a_document_problem_reaches_the_verdict_without_inventing_a_reason(reade
     assert doc["doc_amount"]["status"] == "issue"
     assert result["carc"] is None or result["carc"]["code"] != "198"     # never invented
     assert "ready to submit" not in result["explanation"]["text"].lower()
+
+
+def test_a_missing_required_paper_keeps_a_claim_from_being_called_ready():
+    from backend.services.checks import blocks_submission
+    checks = by_id(document_checks(SURGERY, NEEDS_APPROVAL, reading_of(BILL)))
+    assert blocks_submission(checks["doc_required"])
+    ok = document_checks(SURGERY, {}, reading_of(BILL, DocumentSummary(
+        2, "discharge_summary", "Discharge summary", date="2026-10-12")))
+    assert not any(blocks_submission(c) for c in ok)
+
+
+def test_documents_never_stand_in_for_the_clerks_own_answers(reader):
+    """Read facts are not answers the clerk gave: the check still asks at least the
+    minimum, and they count towards neither the minimum nor the cap."""
+    body = reader.post("/api/documents/read", json=upload(png(), png())).json()
+    start = {c["feature"]: c["value"] for c in body["context"]}
+    step = reader.post("/api/session/start", json={
+        **start, "reading_id": body["reading_id"],
+        "use_facts": [f["feature"] for f in body["facts"]]}).json()
+    sid, asked = step["session_id"], 0
+    while not step["done"]:
+        q = step["question"]
+        value = "yes" if q["feature"] == "pre_auth_obtained" else (
+            q["options"][0]["value"] if q["kind"] == "choice" else 0)
+        step = reader.post(f"/api/session/{sid}/answer",
+                           json={"feature": q["feature"], "value": value}).json()
+        asked += 1
+    assert asked >= 3 and step["n_asked"] == asked
+    assert step["n_answered"] == asked + len(body["facts"])
+
+
+def test_document_started_checks_keep_the_band_guarantees_on_validation():
+    """The bands were fitted on question-only checks. A check that starts from document
+    facts must still clear "low" claims that are accepted at least 85% of the time and put
+    in "high" claims more likely rejected than not (ml/simulate.py's constraints)."""
+    import numpy as np
+    import pandas as pd
+
+    from backend.services.documents import FACT_FIELDS
+    from ml.features import ASKABLE_FEATURES, CONTEXT_FEATURES, TARGET
+    from ml.simulate import MIN_HIGH_BAND_REJECTION, MIN_LOW_BAND_APPROVAL, _python
+    from ml.train import split
+    from tests.helpers import CLAIMS
+
+    df = pd.read_parquet(CLAIMS)
+    _, idx_val, _ = split(df)
+    engine = AdaptiveEngine()
+    low, high = [], []
+    for row in df.loc[idx_val].to_dict("records"):
+        truth = {f: _python(row[f]) for f in ASKABLE_FEATURES + CONTEXT_FEATURES}
+        preset = [f for f in FACT_FIELDS if truth.get(f) is not None]
+        answers = {**{f: truth[f] for f in CONTEXT_FEATURES}, **{f: truth[f] for f in preset}}
+        while not (step := engine.next_step(answers, (), preset)).done:
+            answers[step.question.feature] = truth[step.question.feature]
+        {"low": low, "high": high}.get(step.risk_band, []).append(bool(row[TARGET]))
+    assert 1 - np.mean(low) >= MIN_LOW_BAND_APPROVAL
+    assert np.mean(high) >= MIN_HIGH_BAND_REJECTION

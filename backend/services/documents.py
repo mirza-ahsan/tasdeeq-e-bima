@@ -34,6 +34,7 @@ from datetime import date
 from functools import lru_cache
 
 import pypdfium2 as pdfium
+import pypdfium2.raw as pdfium_c
 from openai import OpenAI
 from PIL import Image, ImageOps
 
@@ -46,12 +47,13 @@ logger = logging.getLogger(__name__)
 
 MAX_FILES = 3
 MAX_FILE_BYTES = 4 * 1024 * 1024
-MAX_PAGES = 4                   # across all files; one call, so it stays inside the timeout
+MAX_PAGES = 3                   # across all files; one call, so it stays inside the timeout
 MAX_SIDE = 1600                 # pixels; legible for print, and bounds the image tokens
 MAX_PIXELS = 40_000_000         # refuse decompression bombs before decoding them
-# A page of print takes Qwen-VL a few seconds; this stays under the web proxy's 30 s.
-TIMEOUT_S = 25.0
-CALLS_PER_MINUTE = 10           # across all users: each call carries several images
+# Two pages took 13-20 s in testing. The web proxy waits 55 s for this route and nginx
+# 60 s, so a slow read still ends in a message rather than a gateway error.
+TIMEOUT_S = 45.0
+CALLS_PER_MINUTE = 20           # across all users: each call carries several images
 READING_TTL_S = 30 * 60
 MAX_READINGS = 200
 
@@ -139,6 +141,8 @@ def _jpeg(img: Image.Image) -> bytes:
 
 
 def _image_pages(data: bytes, name: str) -> list[bytes]:
+    # `name` is "Document 2", never the uploaded file name: a file name can carry the
+    # patient's name or ID number, and errors never echo what was submitted.
     try:
         with Image.open(io.BytesIO(data)) as img:
             if img.width * img.height > MAX_PIXELS:
@@ -160,6 +164,13 @@ def _pdf_pages(data: bytes, name: str, room: int) -> tuple[list[bytes], int]:
         pages = []
         for i in range(min(total, room)):
             page = pdf[i]
+            # Rendering decodes every embedded image at full size whatever the output
+            # scale: a 2 MB PDF can hold a 30,000-pixel-square image. Refuse it unread.
+            for obj in page.get_objects(filter=(pdfium_c.FPDF_PAGEOBJ_IMAGE,), max_depth=3):
+                w, h = obj.get_px_size()
+                if w * h > MAX_PIXELS:
+                    raise DocumentError(f"{name} holds an image too large to read. "
+                                        "Use a smaller scan.")
             w, h = page.get_size()
             scale = min(MAX_SIDE / max(w, h, 1), 3.0)
             pages.append(_jpeg(page.render(scale=scale).to_pil()))
@@ -176,7 +187,8 @@ def prepare_pages(files: list[tuple[str, bytes]]) -> tuple[list[tuple[int, bytes
         raise DocumentError(f"Add at most {MAX_FILES} documents at a time.")
     pages: list[tuple[int, bytes]] = []
     notes: list[str] = []
-    for n, (name, data) in enumerate(files, 1):
+    for n, (_, data) in enumerate(files, 1):
+        name = f"Document {n}"
         if len(data) > MAX_FILE_BYTES:
             raise DocumentError(f"{name} is larger than {MAX_FILE_BYTES // (1024 * 1024)} MB.")
         room = MAX_PAGES - len(pages)
@@ -328,14 +340,20 @@ def _call_model(config: DashScopeConfig, pages: list[tuple[int, bytes]], prompt:
 # Reply -> validated fields
 # ---------------------------------------------------------------------------
 
-# A run of nine or more digits (spaces and dashes allowed) is an ID, card, phone or
-# account number: a CNIC has 13, a mobile number 11. A date has eight, so it survives.
-_DIGIT_RUN = re.compile(r"\+?\d[\d \-]*\d")
+# A run of seven or more digits (spaces, dashes, slashes allowed) is an ID, card, phone,
+# record or account number: a CNIC has 13, a mobile number 11, a record number often 8.
+# Dates are the one long digit run a quote needs, so a run shaped like a date survives.
+_DIGIT_RUN = re.compile(r"\+?\d[\d \-/.]*\d")
+_DATE = re.compile(r"\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}")
 
 
 def _redact(text: str) -> str:
-    return _DIGIT_RUN.sub(lambda m: "•••" if sum(c.isdigit() for c in m.group(0)) >= 9
-                          else m.group(0), text)
+    def hide(m: re.Match) -> str:
+        run = m.group(0)
+        if sum(c.isdigit() for c in run) < 7 or _DATE.fullmatch(run.strip()):
+            return run
+        return "•••"
+    return _DIGIT_RUN.sub(hide, text)
 
 
 def _clean_text(value: object, limit: int) -> str | None:
@@ -439,7 +457,7 @@ def interpret(raw: dict, predictor: Predictor, n_files: int, today: date) -> Rea
               if isinstance(d, dict)} if isinstance(raw.get("documents"), list) else {}
     for n in range(1, n_files + 1):
         d = listed.get(n, {})
-        kind = d.get("type") if d.get("type") in DOCUMENT_TYPES else "other"
+        kind = d.get("type") if isinstance(d.get("type"), str) and d["type"] in DOCUMENT_TYPES else "other"
         when = _date(d.get("date"))
         amount = _whole(d.get("amount_pkr"))
         age = _whole(d.get("patient_age"))
@@ -486,17 +504,20 @@ def read_documents(files: list[tuple[str, bytes]], predictor: Predictor,
     if not config.is_configured:
         raise ReaderUnavailable("Reading documents needs the Qwen service, which is not set "
                                 "up on this server. Enter the bill by hand instead.")
-    pages, notes = prepare_pages(files)
+    # The budget is taken before the pages are rendered, so a flood of uploads cannot
+    # spend CPU the budget would have refused anyway.
     if not _budget.take():
         raise ReaderUnavailable("Too many documents are being read right now. Wait a moment, "
                                 "or enter the bill by hand.")
+    pages, notes = prepare_pages(files)
     try:
         raw = parse_reply(_call_model(config, pages, _user_prompt(len(files), predictor)))
+        # A reply of the wrong shape must end as "enter it by hand", never a server error.
+        reading = interpret(raw, predictor, len(files), today or date.today())
     except Exception as exc:  # noqa: BLE001 — a failed read must leave manual entry open
         logger.warning("Document reading failed (%s).", type(exc).__name__)
         raise ReaderUnavailable("The documents could not be read just now. Try again, or "
                                 "enter the bill by hand.")
-    reading = interpret(raw, predictor, len(files), today or date.today())
     reading.notes = notes + reading.notes
     reading.model = config.vl_model
     return reading
