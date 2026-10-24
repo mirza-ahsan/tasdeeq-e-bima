@@ -148,7 +148,7 @@ def slides() -> list[dict]:
                 "Fee per claim checked, or per panel",
             ])).replace("{clinic}", ul([
                 "Free: a few checks a month",
-                "Paid: about $15–20 a month (proposed)",
+                "Paid: about PKR 3,000–5,000 a month (proposed)",
                 "Costs less than one rejected claim",
             ]))),
 
