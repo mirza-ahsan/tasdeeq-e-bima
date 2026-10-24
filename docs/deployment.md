@@ -59,6 +59,7 @@ DASHSCOPE_API_KEY=...
 DASHSCOPE_BASE_URL=https://ws-<workspace>.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1
 DASHSCOPE_WORKSPACE_ID=ws-<workspace>
 QWEN_MODEL=qwen-plus
+QWEN_VL_MODEL=qwen3-vl-plus
 EOF
 chmod 600 .env
 
@@ -80,6 +81,8 @@ limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
 server {
     listen 80;
     server_name claimcheck.example.com;
+    # Document uploads: up to three 4 MB files, base64-encoded (nginx's default is 1 MB).
+    client_max_body_size 20m;
 
     location /api/ {
         limit_req zone=api burst=20 nodelay;
@@ -117,6 +120,9 @@ nginx 60 s — so a stalled Qwen call ends in the template fallback, never a 504
 - Sessions are capped at 500 and expire after 30 idle minutes.
 - A result is computed once per state of a claim; viewing it again never calls Qwen.
 - Qwen calls are capped at 30 per minute across all users; past that, the template is used.
+- Document reading is capped at 6 per minute per client and 10 Qwen-VL calls per minute
+  overall; uploads are limited to 3 files of 4 MB, are never written to disk, and only the
+  extracted fields are kept, for 30 minutes.
 - `/api/health` reports only whether models loaded and whether Qwen is configured — not
   the endpoint, workspace or session count.
 

@@ -27,7 +27,17 @@ it trips, and what to do before submitting.
 
 It is a spell-checker for insurance claims.
 
-### Four parts
+### Five parts
+
+**Reading the paperwork, powered by Qwen-VL.** The clerk photographs the bill and its papers —
+or types the bill in. Qwen's vision model reads what is printed (patient, procedure, amount,
+insurer, plan, panel status, diagnosis, treatment date) into the check's own fields. Each value is
+shown with the words it was read from, goes through the same validation as typing it, and counts
+only if the clerk keeps it. Pre-authorisation is never taken from a document — a letter can
+suggest it, the clerk must confirm it. The papers are then cross-checked: a missing approval or
+discharge summary, an approval for less than was billed, papers that disagree about the patient
+or the dates. That last check is aimed squarely at the failure the KP Sehat Card audit blamed for
+months of late payment: incomplete documents.
 
 **A risk model.** Gradient-boosted trees (LightGBM), calibrated so that a stated 40% means
 roughly four in ten, predict the probability of rejection on a claim that may still be half
@@ -147,8 +157,8 @@ The system we built supports all four. It simply cannot access the data they req
 
 ## Stack
 
-Python 3.12, LightGBM, FastAPI · Next.js 16, TypeScript, Tailwind · Qwen (`qwen-plus`) via
-Alibaba Cloud DashScope. Both services are containerised, and the images have been built and
+Python 3.12, LightGBM, FastAPI · Next.js 16, TypeScript, Tailwind · Qwen (`qwen-plus`) and
+Qwen-VL (`qwen3-vl-plus`) via Alibaba Cloud DashScope. Both services are containerised, and the images have been built and
 run end to end locally with Docker Compose; [`deployment.md`](deployment.md) is the runbook for
 Alibaba Cloud ECS, which has not been deployed to yet.
 

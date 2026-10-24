@@ -2,8 +2,9 @@
 
 **Catch the insurance rejection before you submit the claim.**
 
-A pre-submission check for private clinics in Pakistan. The clerk enters the bill; the tool
-asks the few paperwork questions that matter for *that* claim, then says how likely it is to
+A pre-submission check for private clinics in Pakistan. The clerk photographs the bill and its
+papers (or types the bill in); Qwen-VL reads what is printed, the clerk confirms it, and the tool
+asks the few paperwork questions the papers can't settle for *that* claim, then says how likely it is to
 bounce, which field is the problem, which real industry reason code it would get, and the one
 thing to fix. Think spell-check, but for insurance claims.
 
@@ -24,15 +25,22 @@ dressed up as a paperwork problem.
 
 ## What it does
 
-1. **Enter the bill.** Patient age and sex, the procedure, the amount — everything printed on
-   the claim. The tool already knows things from these: whether this procedure needs
-   pre-authorisation, what it usually costs.
+1. **Start from the documents, or enter the bill.** Upload photos or PDFs of the bill, an
+   approval letter, a discharge summary: Qwen-VL reads what is printed — patient, procedure,
+   amount, insurer, plan, panel, diagnosis, treatment date — and fills the form, each value shown
+   with the words it was read from for the clerk to keep or drop. Every value goes through the
+   same validation as typing it. Pre-authorisation is never taken from a document, only
+   suggested; the clerk always answers it. Two fictional sample sets are built in for the demo.
 2. **Answer what matters.** One question at a time, each chosen because it would remove the most
    uncertainty about *this* claim. If pre-authorisation was required, that is always the first
-   question. It stops as soon as the verdict is settled: never before 3 questions, never after 8.
+   question. It stops as soon as the verdict is settled: never before 3 answers, never after 8
+   questions. Anything but pre-authorisation can be left as **not sure**; the claim is then never
+   called ready to submit until it is answered.
 3. **Fix it before it bounces.** A calibrated probability; the fields driving it, with points that
-   add up; six insurer-rule checks; the most likely real **X12 CARC** reason code; and the one
-   action to take.
+   add up; six insurer-rule checks, plus checks across the uploaded papers (a missing approval or
+   discharge summary, an approval for less than was billed, papers that disagree on the patient
+   or the dates); the most likely real **X12 CARC** reason code; the one action to take; and a
+   one-page summary to print or save as a PDF and file with the claim.
 4. **In plain English.** Qwen words the computed result in two sentences. It cannot change a
    number: any reply containing a figure it wasn't given is rejected and a template is used.
 5. **Correctable.** Any answer can be changed in place, and staff can flag a verdict as wrong —
@@ -40,6 +48,7 @@ dressed up as a paperwork problem.
 
 | ![Landing](docs/screenshots/landing.png) | ![A check in progress](docs/screenshots/check.png) |
 |---|---|
+| ![Documents read by Qwen-VL](docs/screenshots/documents.png) | ![A verdict from documents: approval below the bill](docs/screenshots/result-documents.png) |
 
 ## The parts doing the real work
 
@@ -121,6 +130,8 @@ docs/        model card, provenance, demo script, deployment runbook, deck, scre
   rejected than not, both either side of the average claim).
 - **Reason model:** LightGBM multiclass on rejected claims with an identifiable cause.
 - **Explanation:** Qwen (`qwen-plus`) on Alibaba Cloud DashScope, OpenAI-compatible API.
+- **Documents:** Qwen-VL (`qwen3-vl-plus`) reads uploaded photos and PDFs into the check's own
+  fields; files are re-encoded in memory, never stored, and names and ID numbers are never kept.
 - **No database, no auth.** Sessions live in memory, bounded and expiring. The feedback log
   is the one thing persisted.
 
@@ -145,7 +156,7 @@ comes from the built-in template instead of Qwen. Set `API_URL` if the API isn't
 **Tests**
 
 ```bash
-uv run pytest -q                 # 74 tests, offline: never calls Qwen or touches feedback.db
+uv run pytest -q                 # 112 tests, offline: never calls Qwen or touches feedback.db
 uv run pytest -q -m live         # one real Qwen call, if .env is filled in
 cd frontend && npm run typecheck && npm run lint && npm test
 ```

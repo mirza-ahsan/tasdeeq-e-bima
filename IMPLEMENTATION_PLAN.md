@@ -469,6 +469,37 @@ app's `/api` proxy with the API address read at runtime; configurable CORS; a fe
 that tests redirect; friendly errors, answer editing, number limits, bands from the API, security
 headers; frontend unit tests.
 
+## Phase 9 — Finals polish: documents, "not sure", printable summary ✅ COMPLETE
+
+Built for the grand finals (24 Oct 2026), one feature at a time, each committed separately.
+
+**Reading the paperwork (Qwen-VL).** `backend/services/documents.py` turns up to three photos or
+PDFs into the check's own fields with `qwen3-vl-plus`. Pages are re-encoded in memory (dropping
+photo metadata), never stored; names and ID numbers are never requested, and long digit runs are
+redacted from the evidence quotes. Every value passes `validate_answer`; anything outside the
+vocabulary or range is dropped and asked instead. Printed facts can be kept as answers by the
+clerk; pre-authorisation is only ever a suggestion, and an open pre-auth question now overrides
+every stopping rule (documents can pass the three-answer minimum before anything is asked).
+Start requests name kept facts by feature; values come from the server's stored reading.
+Diagnosis categories carry a one-line scope in the prompt after gallstones were read as urinary.
+
+**Sample documents.** `scripts/make_samples.py` renders two fictional, watermarked sets (no
+approval letter; an approval for less than was billed), dated relative to the day it runs.
+
+**"Not sure".** Any question except pre-authorisation can be left open: it stays unknown to the
+model, is not asked again, counts towards the question cap but not the answer minimum, and keeps a
+claim from being called ready to submit (screen, Qwen prompt, validator and template alike).
+
+**Cross-document checks.** Required papers for the procedure, approved amount against the bill,
+the same patient throughout, approval dated before treatment. Deterministic, shown under the
+insurer rules; they never change the estimate or name a reason code, but a problem they find
+blocks "ready to submit" and becomes the action to take.
+
+**Printable summary.** One A4 page, black on white in any theme, printed or saved as a PDF.
+
+**Readiness.** `scripts/test_dashscope.py` now also checks Qwen-VL on the sample bill; nginx
+needs `client_max_body_size 20m` for uploads (docs/deployment.md).
+
 **Problems found during the remediation, and fixed:**
 - **Clearing a claim without asking what it was.** With information gain choosing every
   question, a minor surgery without pre-authorisation could be cleared as low risk without the

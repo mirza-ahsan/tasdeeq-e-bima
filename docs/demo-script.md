@@ -4,8 +4,10 @@ Two claims, one honesty line, one closing point. Get the data-provenance line in
 anyone asks it; volunteering it lands far better than defending it.
 
 **Before you start:** API and web running, browser at `http://localhost:3000`, and
-`uv run python scripts/test_dashscope.py` passing (the masthead should read
-"Model online · Qwen on"). Have `docs/model-card.md` open in a second tab in case a judge wants
+`uv run python scripts/test_dashscope.py` passing all four checks, including document reading
+(the masthead should read "Model online · Qwen on"). If the demo is more than a few weeks after
+the sample documents were made, run `uv run python scripts/make_samples.py` and rebuild, so
+their treatment dates stay inside the insurer's filing window. Have `docs/model-card.md` open in a second tab in case a judge wants
 numbers. Both demos **autoplay** one answer every ~1.6 s; the **Pause demo** button stops
 it if you need to talk longer, and you can click the highlighted answer yourself instead.
 
@@ -81,6 +83,30 @@ Click **New check** (top right), then **Clean example**.
 
 *Optional, if there's time: point at "Insurer rules" — "Not checked" means the loop never needed
 that answer to reach a verdict.*
+
+---
+
+## From the papers (40 seconds) — the strongest moment; cut the clean claim if time is short
+
+Click **New check**, then **Check a claim**, then **Sample: surgery, approved**. Qwen-VL takes
+10–15 seconds; talk over it.
+
+> "In real life the clerk doesn't type any of this. They photograph the bill and the approval
+> letter. Qwen's vision model reads what's printed — and look: every value carries the words it
+> was read from. Nothing goes in unless the clerk keeps it."
+
+*Point at the "Read from the documents" quotes and the ticked facts. Click **Start the check**.*
+
+> "Six answers came off the paper, so there's one question left — and it's pre-authorisation.
+> The letter is there, so it suggests 'yes', but a document can suggest, not confirm. That one is
+> always asked."
+
+Answer **Yes, obtained**. On the verdict:
+
+> "The model says 15%, low risk. But it doesn't say 'ready to submit'. Cross-checking the papers
+> found that the approval was for 70,000 rupees and the bill is 85,000. That's exactly what the
+> KP audit blamed for months of unpaid claims: incomplete, inconsistent paperwork. And this —"
+> *click **Download summary (PDF)*** "— is the one page the clerk files with the claim."
 
 ---
 
