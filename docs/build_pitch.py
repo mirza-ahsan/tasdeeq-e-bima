@@ -102,7 +102,7 @@ def slides() -> list[dict]:
               {fact("United States", "$25.7B", "spent by providers fighting denials in 2023", "1")}
               {fact("United States", "86%", "of denials potentially avoidable", "2")}
               {fact("India", "71%", "of health-claim value actually paid, FY 2023-24", "3")}
-              {fact("Pakistan · KP Sehat Card", "5–8 months", "payment waits, blamed on incomplete documents", "4")}
+              {fact("Sehat Card scheme", "5–8 months", "payment waits, blamed on incomplete documents", "4")}
               {fact("Kenya", "600+", "rural private hospitals stopped accepting the national cover", "5")}
             </div>""", sources=[1, 2, 3, 4, 5]),
 
