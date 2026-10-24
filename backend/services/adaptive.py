@@ -155,6 +155,9 @@ class Question:
     min_value: int | None = None
     max_value: int | None = None
     expected_info_gain: float = 0.0
+    # "Not sure" is offered for everything except pre-authorisation, which a claim that
+    # needs it can never be cleared without.
+    can_skip: bool = True
 
 
 @dataclass
@@ -212,17 +215,19 @@ class AdaptiveEngine:
 
     # -- what can be asked ----------------------------------------------------
 
-    def candidates(self, answers: dict, derived: dict | None = None) -> list[str]:
+    def candidates(self, answers: dict, derived: dict | None = None,
+                   skipped: tuple | list = ()) -> list[str]:
         """Unanswered fields that can be asked now.
 
         Pre-authorisation waits until the tool knows it was required. Until then its
         answer has no fixed meaning; once it is known not to be required, the answer
-        is implied and asking would only invite a contradiction.
+        is implied and asking would only invite a contradiction. A field the clerk was
+        not sure about is not asked again.
         """
         derived = derived if derived is not None else self.p.derived(answers)
         out = []
         for f in ASKABLE_FEATURES:
-            if answers.get(f) is not None:
+            if answers.get(f) is not None or f in skipped:
                 continue
             if f == "pre_auth_obtained" and derived.get("pre_auth_required_for_procedure") != 1:
                 continue
@@ -239,24 +244,25 @@ class AdaptiveEngine:
     def _build_question(self, feature: str, gain: float, answers: dict) -> Question:
         text, help_text = question_text(feature, answers, self.p.ref)
         kind = self.priors[feature]["kind"]
+        can_skip = feature != "pre_auth_obtained"
 
         if kind == "numeric":
             lo, hi = NUMBER_LIMITS[feature]
             return Question(feature, text, help_text, "number",
                             unit=NUMBER_UNITS.get(feature), min_value=lo, max_value=hi,
-                            expected_info_gain=gain)
+                            expected_info_gain=gain, can_skip=can_skip)
 
         if kind == "boolean":
             yes, no = BOOLEAN_LABELS[feature]
             return Question(feature, text, help_text, "choice",
                             options=[Option(True, yes), Option(False, no)],
-                            expected_info_gain=gain)
+                            expected_info_gain=gain, can_skip=can_skip)
 
         labels = VALUE_LABELS.get(feature, {})
         values, _ = self.candidate_values(feature)
         opts = [Option(v, labels.get(v, v)) for v in values]
         return Question(feature, text, help_text, "choice", options=opts,
-                        expected_info_gain=gain)
+                        expected_info_gain=gain, can_skip=can_skip)
 
     def question_for(self, feature: str, answers: dict) -> Question:
         """The question as it would be asked now, for editing an answer nobody was asked
@@ -265,9 +271,10 @@ class AdaptiveEngine:
 
     # -- information gain ---------------------------------------------------
 
-    def information_gains(self, answers: dict, derived: dict | None = None) -> dict[str, float]:
+    def information_gains(self, answers: dict, derived: dict | None = None,
+                          skipped: tuple | list = ()) -> dict[str, float]:
         """Expected entropy reduction for every field that can be asked now."""
-        fields = self.candidates(answers, derived)
+        fields = self.candidates(answers, derived, skipped)
         if not fields:
             return {}
 
@@ -292,7 +299,11 @@ class AdaptiveEngine:
 
     # -- the loop -----------------------------------------------------------
 
-    def next_step(self, answers: dict) -> Step:
+    def next_step(self, answers: dict, skipped: tuple | list = ()) -> Step:
+        """The next question, or the verdict. `skipped` are questions the clerk was not
+        sure about: they stay unknown to the model, are not asked again, and count
+        towards the question cap (so the loop still ends) but not towards the minimum
+        number of answers a verdict needs."""
         answers = {k: v for k, v in answers.items() if v is not None}
         n = n_answered(answers)
         p = self.p.predict(answers)
@@ -306,10 +317,12 @@ class AdaptiveEngine:
         # Stopping on the cap or on confidence needs no information gains, so they are
         # only computed when a question might actually be asked.
         early = stop_reason(n, band, best_gain=0.0, min_gain=self.min_gain)
+        if n + len(skipped) >= MAX_QUESTIONS:
+            early = "question_limit_reached"
         if early in ("question_limit_reached", f"confident_{band}_risk") and not must_ask:
             return Step(True, p, band, n, None, early)
 
-        gains = self.information_gains(answers)
+        gains = self.information_gains(answers, skipped=skipped)
         best = self.choose(gains)
         reason = stop_reason(n, band, gains[best] if best else None, self.min_gain)
         if reason and not must_ask:

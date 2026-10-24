@@ -40,7 +40,8 @@ from backend.demo_claims import DEMO_CLAIMS
 from backend.predictor import Attribution, get_predictor
 from backend.schemas import (AnswerRequest, BandsOut, CarcOut, ChangeOut, CheckOut,
                              DocumentOut, DocumentsRequest, DriverOut, ExplanationOut,
-                             FeedbackRequest, FeedbackResponse, FieldOut, HealthOut, MetaOut,
+                             FeedbackRequest, FeedbackResponse, FieldOut, FieldRef, HealthOut,
+                             MetaOut,
                              OptionOut, PatientOut, PreviewOut, PreviewPoint, ProcedureOption,
                              QuestionOut, ReadingOut, ReadValueOut, ResultOut, StartRequest,
                              StepOut)
@@ -82,6 +83,7 @@ class Session:
     id: str
     answers: dict
     order: list[str] = field(default_factory=list)      # questions, in the order asked
+    skipped: list[str] = field(default_factory=list)    # questions answered "not sure"
     last_step: Step | None = None
     last_change: ChangeOut | None = None
     result: tuple[str, ResultOut] | None = None         # (claim state, cached result)
@@ -94,7 +96,9 @@ class Session:
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def state_key(self) -> str:
-        return json.dumps(self.answers, sort_keys=True, default=str)
+        # A "not sure" changes the verdict without changing any answer.
+        return json.dumps({"answers": self.answers, "unsure": sorted(self.skipped)},
+                          sort_keys=True, default=str)
 
 
 class SessionStore:
@@ -275,7 +279,11 @@ def _question_out(q: Question | None, reading: Reading | None = None) -> Questio
         unit=q.unit, min_value=q.min_value, max_value=q.max_value,
         expected_info_gain=round(q.expected_info_gain, 6),
         evidence=hint.evidence if hint else None,
-        suggested=hint.value if hint else None)
+        suggested=hint.value if hint else None, can_skip=q.can_skip)
+
+
+def _unsure(session: Session) -> list[FieldRef]:
+    return [FieldRef(feature=f, label=feature_label(f)) for f in session.skipped]
 
 
 def _checks(engine: AdaptiveEngine, answers: dict) -> list[CheckOut]:
@@ -303,7 +311,7 @@ def _step_out(session: Session, step: Step, engine: AdaptiveEngine) -> StepOut:
         checks=_checks(engine, session.answers), last_change=session.last_change,
         document_questions=[_question_out(engine.question_for(f, session.answers))
                             for f in session.order if f in session.from_documents],
-        documents=_documents(session))
+        documents=_documents(session), unsure=_unsure(session))
 
 
 def _carc_out(code: str, confidence: float) -> CarcOut:
@@ -341,7 +349,7 @@ def _start(answers: dict, engine: AdaptiveEngine, reading: Reading | None = None
                 session.answers[f] = reading.facts[f].value
                 session.order.append(f)
                 session.from_documents.add(f)
-        return _step_out(session, engine.next_step(session.answers), engine)
+        return _step_out(session, engine.next_step(session.answers, session.skipped), engine)
 
 
 def _reading_out(reading: Reading) -> ReadingOut:
@@ -482,12 +490,31 @@ def submit_answer(session_id: str, req: AnswerRequest, request: Request) -> Step
         step = session.last_step
         current = step.question.feature if step and step.question else None
         editing = req.feature in session.order
-        if req.feature != current and not editing:
+        revisiting = req.feature in session.skipped     # answering one left as "not sure"
+        if req.feature != current and not editing and not revisiting:
             raise HTTPException(409, "That question has not been asked in this check yet.")
+
+        if req.not_sure:
+            if req.feature == "pre_auth_obtained":
+                raise HTTPException(422, "Pre-authorisation has to be answered: check the "
+                                         "patient's file or ask the insurer before submitting.")
+            if req.feature != current:
+                raise HTTPException(409, "Only the question being asked can be left as not sure.")
+            before = step.probability
+            session.skipped.append(req.feature)
+            next_step = engine.next_step(session.answers, session.skipped)
+            session.last_change = ChangeOut(
+                feature=req.feature, label=feature_label(req.feature), value_label="Not sure",
+                delta_points=round((next_step.probability - before) * 100, 1))
+            session.result = None
+            return _step_out(session, next_step, engine)
+
         try:
             value = validate_answer(req.feature, req.value, engine.p)
         except InvalidAnswer as exc:
             raise HTTPException(422, str(exc))
+        if revisiting:
+            session.skipped.remove(req.feature)
 
         if editing and session.answers.get(req.feature) == value and step is not None:
             # Re-sending an unchanged answer changes nothing, so it must not invalidate
@@ -499,7 +526,7 @@ def submit_answer(session_id: str, req: AnswerRequest, request: Request) -> Step
         session.from_documents.discard(req.feature)   # the clerk's answer now, not the paper's
         if not editing:
             session.order.append(req.feature)
-        next_step = engine.next_step(session.answers)
+        next_step = engine.next_step(session.answers, session.skipped)
         session.last_change = ChangeOut(
             feature=req.feature, label=feature_label(req.feature),
             value_label=value_label(req.feature, value),
@@ -554,7 +581,8 @@ def get_result(session_id: str, request: Request) -> ResultOut:
             flagged_fields=[FlaggedField(label=d.label, value=d.value_label, effect=d.effect,
                                          contribution_points=d.contribution_points)
                             for d in drivers[:4]],
-            issues=[c.detail for c in checks if c.status == "issue"])
+            issues=[c.detail for c in checks if c.status == "issue"],
+            unconfirmed=[feature_label(f) for f in session.skipped])
         explanation = explain(prediction)
 
         result = ResultOut(
@@ -568,7 +596,7 @@ def get_result(session_id: str, request: Request) -> ResultOut:
             explanation=ExplanationOut(text=explanation.text, source=explanation.source,
                                        model=explanation.model),
             patient=_patient(answers), claim=claim, answered=answered, checks=checks,
-            documents=_documents(session))
+            documents=_documents(session), unsure=_unsure(session))
         session.result = (key, result)
         return result
 

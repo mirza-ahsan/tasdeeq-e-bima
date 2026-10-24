@@ -68,6 +68,8 @@ class ClaimPrediction:
     # reason is not "why it will be rejected" but something to fix before submitting.
     flagged_fields: list[FlaggedField] = field(default_factory=list)
     issues: list[str] = field(default_factory=list)  # failed rule checks, already worded
+    # Questions the clerk answered "not sure": the claim is not ready while these are open.
+    unconfirmed: list[str] = field(default_factory=list)
 
     @property
     def percent(self) -> int:
@@ -88,6 +90,7 @@ class ClaimPrediction:
             "likely_rejection_reason": None if self.fix_first else reason,
             "fix_before_submitting": reason if self.fix_first else None,
             "rule_check_issues": self.issues,
+            "unconfirmed_fields": self.unconfirmed,
             "flagged_fields": [
                 {**asdict(f), "contribution_points": round(f.contribution_points, 1)}
                 for f in self.flagged_fields],
@@ -145,10 +148,18 @@ If risk_band is "low" and there is a fix_before_submitting:
 - Sentence 1: begin "The rejection risk is low at N%, but" and name the problem.
 - Sentence 2: give its staff_action. Do not say the claim is ready to submit.
 
-If risk_band is "low" and there is no fix_before_submitting:
+If risk_band is "low", there is no fix_before_submitting, and unconfirmed_fields is empty:
 - Sentence 1: begin "The rejection risk is low at N%" and name the strongest field \
 supporting that if there is one.
 - Sentence 2: say the claim looks ready to submit. Do not invent a task.
+
+If risk_band is "low", there is no fix_before_submitting, and unconfirmed_fields is not empty:
+- Sentence 1: begin "The rejection risk is low at N%".
+- Sentence 2: say to confirm the details in unconfirmed_fields before submitting. Do not \
+say the claim is ready to submit.
+
+unconfirmed_fields are details staff were not sure about. Whenever it is not empty, never \
+say the claim is ready to submit.
 
 Never describe the risk with a band other than risk_band: do not call a "medium" claim low or \
 high, a "low" claim high or moderate, or a "high" claim low or moderate.
@@ -260,6 +271,8 @@ def validate(text: str, prediction: ClaimPrediction) -> str | None:
         return "does not say the risk is low"
     if (prediction.fix_first or prediction.issues) and "ready to submit" in low:
         return "calls a claim with a known problem ready to submit"
+    if prediction.unconfirmed and "ready to submit" in low:
+        return "calls a claim with unconfirmed details ready to submit"
     for topic, words in _TOPICS.items():
         if any(w in low for w in words) and not any(w in payload for w in words):
             return f"raises {topic}, which is not in the result"
@@ -280,6 +293,11 @@ def _sentence(s: str) -> str:
     return s if s.endswith((".", "!", "?")) else s + "."
 
 
+def _listed(labels: list[str]) -> str:
+    words = [label.lower() for label in labels]
+    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+
+
 def fallback_text(prediction: ClaimPrediction) -> str:
     """Deterministic two-sentence explanation in the same plain English as the prompt."""
     pct = prediction.percent
@@ -297,6 +315,10 @@ def fallback_text(prediction: ClaimPrediction) -> str:
             issue = prediction.issues[0].rstrip(".")
             return (f"The rejection risk is low at {pct}%, but "
                     f"{issue[0].lower() + issue[1:]}; resolve it before submitting.")
+        if prediction.unconfirmed:
+            return (f"The rejection risk is low at {pct}%, but {_listed(prediction.unconfirmed)} "
+                    f"{'is' if len(prediction.unconfirmed) == 1 else 'are'} not confirmed yet. "
+                    "Confirm before submitting.")
         support = f", helped most by {helpers[0].label.lower()} ({helpers[0].value})" if helpers else ""
         return f"The rejection risk is low at {pct}%{support}. The claim looks ready to submit."
 

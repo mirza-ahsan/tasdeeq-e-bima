@@ -29,6 +29,12 @@ class QuestionOut(BaseModel):
     # suggestion only: the clerk still answers it.
     evidence: str | None = None
     suggested: Any = None
+    can_skip: bool = True           # "Not sure" is never offered for pre-authorisation
+
+
+class FieldRef(BaseModel):
+    feature: str
+    label: str
 
 
 class FieldOut(BaseModel):
@@ -99,6 +105,7 @@ class StepOut(BaseModel):
     # How to change an answer that came from the documents: no question was asked for it.
     document_questions: list[QuestionOut] = []
     documents: list[DocumentOut] = []
+    unsure: list[FieldRef] = []     # questions the clerk was not sure about, in order
 
 
 class StartRequest(BaseModel):
@@ -143,7 +150,8 @@ class ReadingOut(BaseModel):
 
 class AnswerRequest(BaseModel):
     feature: str
-    value: Any   # validated per field against the training vocabulary and ranges
+    value: Any = None   # validated per field against the training vocabulary and ranges
+    not_sure: bool = False   # leave this question unanswered and move on
 
 
 class DriverOut(BaseModel):
@@ -192,6 +200,7 @@ class ResultOut(BaseModel):
     answered: list[FieldOut]
     checks: list[CheckOut]
     documents: list[DocumentOut] = []
+    unsure: list[FieldRef] = []
 
 
 class FeedbackRequest(BaseModel):
