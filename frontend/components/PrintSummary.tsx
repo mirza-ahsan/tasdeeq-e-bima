@@ -1,4 +1,4 @@
-import { BAND_LABEL, pct, points as fmtPoints } from "@/lib/format";
+import { BAND_LABEL, blocksSubmission, pct, points as fmtPoints } from "@/lib/format";
 import type { Check, Field, Result } from "@/lib/types";
 
 /**
@@ -22,9 +22,11 @@ const SOURCE_WORD: Record<Field["source"], string> = {
 };
 
 function headline(result: Result): string {
+  if (result.stop_reason === "too_few_answers") return "Not enough answered for a verdict";
   if (result.risk_band === "high") return "High risk of rejection";
   if (result.risk_band === "medium") return result.carc ? "Worth a second look" : "Not fully cleared";
-  if (result.fix_first || result.checks.some((c) => c.status === "issue")) return "Low risk — fix one thing first";
+  const blocking = result.checks.filter(blocksSubmission).length + (result.fix_first ? 1 : 0);
+  if (blocking) return blocking === 1 ? "Low risk — fix one thing first" : "Low risk — fix the flagged problems first";
   if (result.unsure?.length) return "Low risk — confirm the open questions first";
   return "Looks ready to submit";
 }
@@ -32,7 +34,7 @@ function headline(result: Result): string {
 function firstStep(result: Result): string | null {
   const lead = result.carc ?? result.fix_first;
   if (lead) return lead.staff_action;
-  const problem = result.checks.find((c) => c.status === "issue");
+  const problem = result.checks.find((c) => c.status === "issue") ?? result.checks.find(blocksSubmission);
   if (problem) return problem.detail;
   if (result.unsure?.length) return `Confirm before submitting: ${result.unsure.map((u) => u.label).join(", ")}.`;
   return null;
@@ -70,7 +72,9 @@ export function PrintSummary({ result, generatedAt }: { result: Result; generate
         <div>
           <div className="ps-title">{headline(result)}</div>
           <div className="ps-muted">
-            Chance of rejection · {BAND_LABEL[result.risk_band]} (average claim {pct(result.base_rate)})
+            Chance of rejection ·{" "}
+            {result.stop_reason === "too_few_answers" ? "estimate so far, not a verdict" : BAND_LABEL[result.risk_band]}{" "}
+            (average claim {pct(result.base_rate)})
           </div>
           <p className="ps-quote">“{result.explanation.text}”</p>
         </div>
@@ -126,8 +130,10 @@ export function PrintSummary({ result, generatedAt }: { result: Result; generate
       <footer className="ps-foot ps-muted">
         A second check for clinic staff, not a replacement for their judgement. The risk comes
         from a model trained on simulated claims; rule checks come from the tool&apos;s rule tables;
-        the sentence was {result.explanation.source === "qwen" ? `worded by Qwen (${result.explanation.model})` : "written from a fixed template"}
-        {" "}and checked against the figures above. Points show how far each fact moved the
+        {result.explanation.source === "qwen"
+          ? `the sentence was worded by Qwen (${result.explanation.model}) and checked against the figures above`
+          : "the sentence comes from a fixed template filled with the figures above"}
+        . Points show how far each fact moved the
         estimate from a typical claim for this patient ({pct(result.typical_probability)}).
       </footer>
     </article>

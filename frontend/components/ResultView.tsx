@@ -9,11 +9,17 @@ import { BAND_TONE, BandBadge } from "@/components/RiskPanel";
 import { GLOSSARY, Term } from "@/components/Term";
 import { Waterfall } from "@/components/Waterfall";
 import { ApiError, api } from "@/lib/api";
-import { pct, relative, STOP_REASON_TEXT } from "@/lib/format";
+import { blocksSubmission, pct, relative, STOP_REASON_TEXT } from "@/lib/format";
 import type { Question, Result } from "@/lib/types";
 
 /** "Likely to be rejected" only where the number supports it: a calibrated 40% is not. */
 function headline(result: Result): { title: string; sub: string } {
+  if (result.stop_reason === "too_few_answers") {
+    return {
+      title: "Not enough answered for a verdict",
+      sub: "Most questions were left as not sure. The figure is an estimate so far, not a verdict.",
+    };
+  }
   if (result.risk_band === "high") {
     return {
       title: "High risk of rejection",
@@ -35,8 +41,12 @@ function headline(result: Result): { title: string; sub: string } {
     return { title: "Low risk — fix one thing first", sub: "The claim is in good shape apart from the problem below." };
   }
   // A rule or document problem the model cannot see still keeps a claim from being "ready".
-  if (result.checks.some((c) => c.status === "issue")) {
-    return { title: "Low risk — resolve the flagged problem", sub: "The model sees little risk, but a rule check below found something to fix first." };
+  const blocking = result.checks.filter(blocksSubmission);
+  if (blocking.length) {
+    return {
+      title: blocking.length === 1 ? "Low risk — resolve the flagged problem" : "Low risk — resolve the flagged problems",
+      sub: "The model sees little risk, but a rule check below found something to fix first.",
+    };
   }
   const open = result.unsure?.length ?? 0;
   if (open) {
@@ -121,7 +131,7 @@ function Feedback({ sessionId }: { sessionId: string }) {
 
 function questionCount(result: Result) {
   const read = result.answered.filter((a) => a.source === "document").length;
-  const asked = result.n_answered - read + (result.unsure?.length ?? 0);
+  const asked = result.n_asked;
   const q = `${asked} question${asked === 1 ? "" : "s"} asked`;
   return read ? `${q}, ${read} answer${read === 1 ? "" : "s"} read from the documents.` : `${q}.`;
 }
@@ -139,10 +149,11 @@ export function ResultView({
   onEdit: (feature: string, value: unknown) => void;
   onRestart: () => void;
 }) {
-  const tone = BAND_TONE[result.risk_band];
   const { title, sub } = headline(result);
   const action = result.carc ?? result.fix_first;
-  const problem = result.checks.find((c) => c.status === "issue");
+  const problem = result.checks.find((c) => c.status === "issue") ?? result.checks.find(blocksSubmission);
+  const tooFew = result.stop_reason === "too_few_answers";
+  const tone = tooFew ? { mark: "var(--ink-3)", ink: "var(--ink-2)", wash: "var(--surface-2)" } : BAND_TONE[result.risk_band];
   const unsure = result.unsure ?? [];
   const heading = useRef<HTMLHeadingElement>(null);
   // The verdict takes focus when it arrives, so keyboard and screen-reader users land on it.
@@ -172,7 +183,7 @@ export function ResultView({
               <span className="text-[84px] font-semibold leading-[0.85] tracking-[-0.05em]">{result.probability_percent}</span>
               <span className="text-[30px] font-medium text-ink-3">%</span>
             </div>
-            <div className="mt-4"><BandBadge band={result.risk_band} /></div>
+            <div className="mt-4"><BandBadge band={result.risk_band} early={tooFew} /></div>
             <p className="mt-3 text-[12.5px] text-ink-3">{relative(result.probability, result.base_rate)}</p>
           </div>
 

@@ -13,8 +13,11 @@ import type { Reading, UploadFile } from "@/lib/types";
  */
 export function DocumentReader({
   onRead,
+  onAnnounce,
   samples,
 }: {
+  /** Says something through the page's one live region. */
+  onAnnounce?: (message: string) => void;
   /** What was read, and a preview of each document (an image URL, or null for a PDF). */
   onRead: (reading: Reading, previews: (string | null)[]) => void;
   /** Ready-made documents for a demo, when the app ships some. */
@@ -40,12 +43,15 @@ export function DocumentReader({
   async function read(load: () => Promise<UploadFile[]>, what: string, previews: () => (string | null)[]) {
     setError(null);
     setReading(what);
+    onAnnounce?.(`Qwen is reading ${what}.`);
     try {
       const result = await api.readDocuments(await load());
       onRead(result, previews());
       setFiles([]);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "These documents could not be prepared. Try a clearer photo or a PDF.");
+      const message = e instanceof ApiError ? e.message : "These documents could not be prepared. Try a clearer photo or a PDF.";
+      setError(message);
+      onAnnounce?.(message);
     } finally {
       setReading(null);
     }
@@ -65,11 +71,15 @@ export function DocumentReader({
             Photograph or upload the bill and its papers. Qwen reads what is printed on them and
             fills in the form; you check every value before the check starts.
           </p>
+          <p className="mt-1.5 max-w-[540px] text-[12px] leading-relaxed text-ink-3">
+            The pages are sent to Qwen on Alibaba Cloud to be read and are not stored. Names and ID
+            numbers are not kept. Use the samples for a demo.
+          </p>
         </div>
       </div>
 
       {reading ? (
-        <div role="status" className="mt-5 flex items-center gap-3 rounded-2xl border border-line bg-surface-2 px-4 py-4 text-[13.5px] text-ink-2">
+        <div className="mt-5 flex items-center gap-3 rounded-2xl border border-line bg-surface-2 px-4 py-4 text-[13.5px] text-ink-2">
           <span className="pulse-dot h-2.5 w-2.5 shrink-0 rounded-full bg-brand" />
           <span>
             Qwen is reading {reading}… This usually takes 10–15 seconds.

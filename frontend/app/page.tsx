@@ -34,8 +34,11 @@ function billSummary(step: Step) {
 
 /** Answers read from the documents, rather than asked. */
 const fromDocuments = (step: Step) => step.answered.filter((a) => a.source === "document").length;
-/** Questions actually put to the clerk, including those left as "not sure". */
-const asked = (step: Step) => step.n_answered - fromDocuments(step) + (step.unsure?.length ?? 0);
+/** Questions actually put to the clerk, including those left as "not sure" (from the API:
+ * an edited document fact becomes the clerk's answer, but was never asked). */
+const asked = (step: Step) => step.n_asked;
+/** Answers the clerk gave: the minimum a verdict needs counts only these. */
+const clerkAnswers = (step: Step) => step.n_asked - (step.unsure?.length ?? 0);
 
 function ClaimStrip({ step, demo, onRestart }: { step: Step; demo: DemoKind | null; onRestart: () => void }) {
   const proc = step.claim.find((f) => f.feature === "procedure_category");
@@ -71,10 +74,11 @@ function ClaimStrip({ step, demo, onRestart }: { step: Step; demo: DemoKind | nu
 }
 
 function Progress({ step, settled }: { step: Step; settled: boolean }) {
-  const { n_answered: n, min_questions: min, max_questions: max } = step;
+  const { min_questions: min, max_questions: max } = step;
   const read = fromDocuments(step);
   const unsure = step.unsure?.length ?? 0;
-  const used = n + unsure;   // the cap counts every question put, answered or not
+  const n = clerkAnswers(step);
+  const used = step.n_asked;   // the cap counts every question put, answered or not
   return (
     <div>
       <div className="flex items-baseline justify-between">
@@ -313,7 +317,7 @@ export default function Page() {
         <TopBar onHome={home} onRecover={recover} />
         <main className="flex-1">
           <Intake meta={meta} busy={busy} error={error?.message ?? null} onBack={home} onSubmit={startIntake}
-                  samples={SAMPLES} />
+                  onAnnounce={setAnnouncement} samples={SAMPLES} />
         </main>
         <Footer />
       </div>
@@ -325,7 +329,9 @@ export default function Page() {
   const delta = history.length > 1 ? (history.at(-1)!.probability - history.at(-2)!.probability) * 100 : null;
   const probability = result?.probability ?? s.probability;
   const band = result?.risk_band ?? s.risk_band;
-  const early = !settled && s.n_answered < s.min_questions;
+  // A band word is a verdict: not before the clerk has given the minimum answers, and not
+  // when the check had to end short of it.
+  const early = (!settled && clerkAnswers(s) < s.min_questions) || result?.stop_reason === "too_few_answers";
 
   const errorBanner = error && (
     <div role="alert" className="rise flex flex-wrap items-center gap-3 rounded-2xl border border-crit/30 bg-crit-wash px-4 py-3 text-[13.5px] text-crit-ink">
@@ -383,7 +389,7 @@ export default function Page() {
                     key={`${s.question.feature}-${s.n_answered}`}
                     question={s.question}
                     index={asked(s) + 1}
-                    suggested={script ? script[s.question.feature] : (s.question.suggested ?? undefined)}
+                    suggested={script ? script[s.question.feature] : undefined}
                     suggestedBy={script ? "demo" : "documents"}
                     busy={busy}
                     change={s.last_change}

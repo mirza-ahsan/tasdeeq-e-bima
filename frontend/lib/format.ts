@@ -31,4 +31,10 @@ export const STOP_REASON_TEXT: Record<string, string> = {
   no_informative_questions_left: "Stopped: no remaining question would move the estimate.",
   all_questions_answered: "Every question was answered.",
   question_limit_reached: "Reached the question limit.",
+  too_few_answers: "Too few questions were answered for a verdict.",
 };
+
+/** Whether a check keeps a claim from being called ready: any problem, or a required
+ * paper missing from the uploads. Mirrors `blocks_submission` in backend/services/checks.py. */
+export const blocksSubmission = (c: { id: string; status: string }) =>
+  c.status === "issue" || (c.id === "doc_required" && c.status === "warn");

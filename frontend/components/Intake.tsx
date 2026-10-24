@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DocumentReader } from "@/components/DocumentReader";
 import { IconArrowLeft, IconArrowRight, IconCheck, IconFile, IconShield } from "@/components/icons";
 import { pkr } from "@/lib/format";
@@ -54,8 +54,11 @@ export function Intake({
   error,
   onBack,
   onSubmit,
+  onAnnounce,
   samples,
 }: {
+  /** Says something through the page's one live region. */
+  onAnnounce?: (message: string) => void;
   meta: Meta;
   busy: boolean;
   error: string | null;
@@ -72,6 +75,18 @@ export function Intake({
   // changes it; the facts beyond the bill are kept unless the clerk unticks them.
   const [reading, setReading] = useState<Reading | null>(null);
   const [previews, setPreviews] = useState<(string | null)[]>([]);
+  const summary = useRef<HTMLDivElement>(null);
+  // Photo previews are object URLs: release them when this form goes away.
+  const live = useRef<(string | null)[]>([]);
+  useEffect(() => {
+    live.current = previews;
+  }, [previews]);
+  useEffect(
+    () => () => {
+      for (const url of live.current) if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
+    },
+    [],
+  );
   const [fromDoc, setFromDoc] = useState<Record<string, ReadValue>>({});
   const [kept, setKept] = useState<Set<string>>(new Set());
   const mine = (feature: string) =>
@@ -93,6 +108,12 @@ export function Intake({
     setFromDoc(byFeature);
     setKept(new Set(r.facts.map((f) => f.feature)));
     setReading(r);
+    onAnnounce?.(
+      `Read ${r.documents.length === 1 ? "1 document" : `${r.documents.length} documents`}. ` +
+        `${r.context.length + r.facts.length} values filled in; check each before starting.`,
+    );
+    // The button that started the read is gone; the summary of what was read takes focus.
+    requestAnimationFrame(() => summary.current?.focus());
   }
 
   function clearReading() {
@@ -160,7 +181,7 @@ export function Intake({
 
       <div className="rise rise-1 mt-8">
         {reading ? (
-          <div className="card flex flex-wrap items-center gap-x-4 gap-y-2 p-5 sm:px-8">
+          <div ref={summary} tabIndex={-1} className="card flex flex-wrap items-center gap-x-4 gap-y-2 p-5 outline-none sm:px-8">
             {previews.some(Boolean) ? (
               <div className="flex shrink-0 gap-2" aria-hidden>
                 {reading.documents.map((d, i) =>
@@ -198,7 +219,7 @@ export function Intake({
             )}
           </div>
         ) : (
-          <DocumentReader onRead={applyReading} samples={samples} />
+          <DocumentReader onRead={applyReading} onAnnounce={onAnnounce} samples={samples} />
         )}
       </div>
 

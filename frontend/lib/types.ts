@@ -74,7 +74,10 @@ export interface Step {
   bands: Bands;
   base_rate: number;
   typical_probability: number;
+  /** Everything known, including facts read from documents. */
   n_answered: number;
+  /** Questions put to the clerk, answered or left as not sure. */
+  n_asked: number;
   min_questions: number;
   max_questions: number;
   question: Question | null;
@@ -116,6 +119,7 @@ export interface Result {
   base_rate: number;
   typical_probability: number;
   n_answered: number;
+  n_asked: number;
   stop_reason: string | null;
   drivers: Driver[];
   other_points: number;
