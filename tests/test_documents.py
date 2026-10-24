@@ -430,3 +430,16 @@ def test_document_started_checks_keep_the_band_guarantees_on_validation():
         {"low": low, "high": high}.get(step.risk_band, []).append(bool(row[TARGET]))
     assert 1 - np.mean(low) >= MIN_LOW_BAND_APPROVAL
     assert np.mean(high) >= MIN_HIGH_BAND_REJECTION
+
+
+def test_the_explanation_names_the_problem_the_action_box_shows():
+    from backend.main import _issues
+    from backend.schemas import CheckOut
+    checks = [CheckOut(id="doc_required", label="Required documents", status="warn",
+                       detail="Not among the uploaded documents: a discharge summary. Attach it."),
+              CheckOut(id="doc_amount", label="Within the approved amount", status="issue",
+                       detail="Billed PKR 85,000 but approved for PKR 70,000: PKR 15,000 above "
+                              "the approval. Ask the insurer for a revised approval first.")]
+    issues = _issues(checks)
+    assert issues[0].startswith("Billed PKR 85,000")           # the problem before the warning
+    assert all(i.count(". ") == 0 for i in issues)              # one sentence each, for Qwen

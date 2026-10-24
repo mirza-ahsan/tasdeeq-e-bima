@@ -342,6 +342,15 @@ def _reasons(engine: AdaptiveEngine, answers: dict, derived: dict) -> list[CarcO
     return [_carc_out(c, ranked.get(c, 0.0)) for c in present]
 
 
+def _issues(checks: list[CheckOut]) -> list[str]:
+    """What blocks submission, for the explanation: problems before missing papers, so the
+    sentence names the same thing as the action box, and each cut to its first sentence,
+    the finding itself. Some details go on to say what to do, and restating a two-sentence
+    detail inside a two-sentence reply sent Qwen past the limit every time."""
+    blocking = sorted((c for c in checks if blocks_submission(c)), key=lambda c: c.status != "issue")
+    return [c.detail.split(". ")[0].rstrip(".") + "." for c in blocking]
+
+
 def _start(answers: dict, engine: AdaptiveEngine, reading: Reading | None = None,
            facts: list[str] = ()) -> StepOut:
     session = sessions.create(answers)
@@ -598,7 +607,7 @@ def get_result(session_id: str, request: Request) -> ResultOut:
             flagged_fields=[FlaggedField(label=d.label, value=d.value_label, effect=d.effect,
                                          contribution_points=d.contribution_points)
                             for d in drivers[:4]],
-            issues=[c.detail for c in checks if blocks_submission(c)],
+            issues=_issues(checks),
             unconfirmed=[feature_label(f) for f in session.skipped],
             too_few_answers=step.stop_reason == "too_few_answers")
         explanation = explain(prediction)
