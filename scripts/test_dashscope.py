@@ -5,11 +5,12 @@ Run this before a demo, to confirm Qwen will actually be used rather than the fa
 
     uv run python scripts/test_dashscope.py
 
-Three checks:
-  1. All four environment variables resolve (key presence only — never its value).
+Four checks:
+  1. All the environment variables resolve (key presence only — never its value).
   2. A raw chat completion reaches the endpoint and comes back.
   3. The real explanation layer produces advice from a sample prediction, and that
      advice passes the same validation the API applies before showing it.
+  4. Qwen-VL reads the demo's sample bill and returns the fields printed on it.
 
 This script never prints, logs, or echoes the API key.
 """
@@ -20,9 +21,12 @@ import sys
 from pathlib import Path
 
 # Allow running directly as `python scripts/test_dashscope.py` from anywhere.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
 from backend.config import load_dashscope_config
+from backend.predictor import get_predictor
+from backend.services.documents import ReaderUnavailable, read_documents
 from backend.services.explain_qwen import (
     ClaimPrediction,
     FlaggedField,
@@ -61,7 +65,7 @@ def main() -> int:
 
     config = load_dashscope_config()
 
-    print("\n[1/3] Environment variables")
+    print("\n[1/4] Environment variables")
     for name, value in config.status().items():
         print(f"      {name:<24} {value}")
 
@@ -70,7 +74,7 @@ def main() -> int:
         print("  Copy .env.example to .env and fill in your key, then re-run.")
         return 1
 
-    print("\n[2/3] Raw chat completion")
+    print("\n[2/4] Raw chat completion")
     try:
         client = _build_client(config)
         response = client.chat.completions.create(
@@ -98,7 +102,7 @@ def main() -> int:
         print(f"   - Model {config.model!r} not enabled on this account")
         return 1
 
-    print("\n[3/3] Explanation layer (strict prompt, sample prediction)")
+    print("\n[3/4] Explanation layer (strict prompt, sample prediction)")
     result = explain(SAMPLE, config=config)
     print(f"      source   : {result.source}")
     print(f"      model    : {result.model or '-'}")
@@ -106,6 +110,24 @@ def main() -> int:
     if result.source == "fallback":
         print("      WARN: fell back to the template — the call failed, or its reply broke a")
         print("            rule and was rejected (the log line above says which).")
+        return 1
+    print("      PASS")
+
+    print(f"\n[4/4] Document reading ({config.vl_model}, the demo's sample bill)")
+    bill = ROOT / "frontend" / "public" / "samples" / "surgery-no-approval" / "bill.jpg"
+    try:
+        reading = read_documents([("bill.jpg", bill.read_bytes())], get_predictor(), config=config)
+    except (ReaderUnavailable, OSError) as exc:
+        print(f"      FAIL: {exc}")
+        return 1
+    read = {**reading.context, **reading.facts}
+    for feature, value in read.items():
+        print(f"      {feature:<24} {value.value_label}")
+    expected = {"procedure_category": "minor_surgery", "claim_amount_pkr": 85_000,
+                "insurer_tpa": "Nigheban Health Board"}
+    wrong = [f for f, v in expected.items() if f not in read or read[f].value != v]
+    if wrong:
+        print(f"      FAIL: misread {', '.join(wrong)}")
         return 1
     print("      PASS")
 
