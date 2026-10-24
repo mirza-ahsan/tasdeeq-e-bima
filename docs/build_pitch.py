@@ -32,12 +32,10 @@ SOURCES = [
      "beckershospitalreview.com/finance/86-of-denials-are-potentially-avoidable-strategies-to-better-prevent-manage-denials"),
     ("Outlook Business, on the IRDAI Annual Report 2023-24, 30 Dec 2024",
      "outlookbusiness.com/economy-and-policy/health-insurers-disallowed-claims-worth-rs-15100-crore-during-fy24"),
-    ("Aaj News, “More pain than relief for KP health card holders” (Baker Tilly audit), 22 Nov 2022",
-     "english.aaj.tv/news/30304857"),
-    ("Business Daily Africa, “Rural private hospitals reject SHA cover over Sh22bn debt”, 20 Feb 2025",
-     "businessdailyafrica.com/bd/corporate/health/rural-private-hospitals-reject-sha-cover-over-sh22bn-debt-4934984"),
-    ("American Medical Association, 2024 Prior Authorization Physician Survey",
-     "ama-assn.org/press-center/ama-press-releases/ama-survey-indicates-prior-authorization-wreaks-havoc-patient-care"),
+    ("Jubilee Insurance Kenya, CoverBora brochure (pre-authorisation terms)",
+     "jubileeinsurance.com/ke/wp-content/uploads/2024/01/CoverBora-Brochure.pdf"),
+    ("Business Daily Africa, “Jubilee Insurance, Nairobi Hospital in debt row”, June 2020",
+     "businessdailyafrica.com/bd/news/jubilee-insurance-nairobi-hospital-in-debt-row-2293534"),
 ]
 
 
@@ -82,29 +80,45 @@ def slides() -> list[dict]:
             """, image="landing.png"),
 
         dict(eyebrow="The problem", title="Claims get rejected for paperwork, not medicine", body=f"""
-            <div class="split">
-              <div>{ul([
-                  "Weeks after treatment, the claim bounces: <b>no pre-authorisation</b>, a <b>missed "
-                  "deadline</b>, <b>missing documents</b>",
-                  "The clinic reworks it and waits again for its money",
-                  "Small clinics can’t absorb that — they stop taking insured patients",
-              ])}</div>
-              <aside class="card">
-                <div class="k">Pre-authorisation</div>
-                <p>Insurer approval needed <b>before</b> a planned treatment. Miss it and correct care
-                can still go unpaid.<sup>6</sup></p>
-              </aside>
-            </div>""", sources=[6]),
+            {ul([
+                "Weeks after treatment the claim bounces: <b>no pre-authorisation</b>, <b>missing "
+                "documents</b>, a <b>missed deadline</b>",
+                "The clinic reworks it and waits again — small clinics stop taking insured patients",
+            ])}
+            <div class="stats mt">
+              {stat("15%", "of US private-insurer claims denied first time", "1")}
+              {stat("$25.7B", "spent by US providers fighting denials (2023)", "1")}
+              {stat("86%", "of denials potentially avoidable", "2")}
+              {stat("71%", "of India’s health-claim value actually paid (FY24)", "3")}
+            </div>""", sources=[1, 2, 3]),
 
-        dict(eyebrow="The scale", title="A global problem, hardest where insurance is new", body=f"""
-            <div class="grid3">
-              {fact("United States", "15%", "of claims to private insurers denied first time", "1")}
-              {fact("United States", "$25.7B", "spent by providers fighting denials in 2023", "1")}
-              {fact("United States", "86%", "of denials potentially avoidable", "2")}
-              {fact("India", "71%", "of health-claim value actually paid, FY 2023-24", "3")}
-              {fact("Sehat Card scheme", "5–8 months", "payment waits, blamed on incomplete documents", "4")}
-              {fact("Kenya", "600+", "rural private hospitals stopped accepting the national cover", "5")}
-            </div>""", sources=[1, 2, 3, 4, 5]),
+        dict(eyebrow="Case study · Jubilee Health Insurance, Kenya",
+             title="One insurer, every way a claim can fail", body="""
+            <div class="case">
+              <div>
+                <div class="k">The path every claim must survive</div>
+                <ol class="path">
+                  <li><b>Verify</b> the medical card and national ID</li>
+                  <li><b>Pre-authorise</b> 48 h before a planned admission<sup>4</sup></li>
+                  <li><b>Claim form</b> signed by patient and doctor</li>
+                  <li><b>Submit</b> every bill, report and summary in time</li>
+                  <li><b>Vetting</b>, then payment — if nothing is missing</li>
+                </ol>
+              </div>
+              <table class="map">
+                <tr><th>Jubilee can reject for…</th><th>Claim Check, before sending</th></tr>
+                <tr><td>No pre-authorisation</td><td>Asked first, every time</td></tr>
+                <tr><td>Incomplete documents</td><td>Flags missing papers</td></tr>
+                <tr><td>Discharge summary ≠ approval</td><td>Cross-checks the papers</td></tr>
+                <tr><td>Clinic not on the plan’s panel</td><td>Asks panel status</td></tr>
+                <tr><td>Service not covered by the plan</td><td>Plan-coverage check</td></tr>
+                <tr><td>Filed too late</td><td>Filing-deadline check</td></tr>
+                <tr class="todo"><td>Pre-existing condition</td><td>Not yet — roadmap</td></tr>
+              </table>
+            </div>
+            <p class="note">The cost of getting it wrong: Nairobi Hospital suspended Jubilee in 2020 over a
+            claimed <b>KSh 357 million</b> in unpaid claims dating back to 2018.<sup>5</sup></p>""",
+             sources=[4, 5]),
 
         dict(eyebrow="Our solution", title="A spell-checker for insurance claims", body="""
             <div class="steps">
@@ -113,40 +127,20 @@ def slides() -> list[dict]:
               <div><span>3</span><b>Fix before sending</b><p>Chance of rejection, the cause, the fix</p></div>
             </div>""", image="documents.png"),
 
-        dict(eyebrow="Business case", title="Everyone in the claim wins", body=f"""
-            <div class="cols">
-              <div class="card"><div class="k">Clinics</div>{ul(["Paid sooner", "Less rework", "Predictable cash flow"])}</div>
-              <div class="card"><div class="k">Insurers &amp; TPAs</div>{ul(["Cleaner claims", "Fewer appeals", "Lower admin cost"])}</div>
-              <div class="card"><div class="k">Patients</div>{ul(["Clinics keep accepting their insurance", "Care isn’t held up by paperwork"])}</div>
-            </div>
-            <p class="note"><b>How it could earn (proposed):</b> per-clinic subscription · licence to TPAs for
-            their provider panel · integration with national e-claims schemes</p>"""),
-
-        dict(eyebrow="How it works", title="Reads the papers, asks the rest, says what to fix", body=f"""
-            {ul([
-                "Fills in what is printed, then asks what the papers can’t settle",
-                "Cross-checks the papers: a missing approval, an approval below the bill",
-                "Risk updates after every answer; stops once settled",
-                "The cause, the official rejection code, the fix — and a one-page printout",
-            ])}
-            <p class="inline-stats"><b>{v['mean_questions']:.1f}</b> questions on average ·
-            <b>{v['distinct_question_orders']}</b> different question orders</p>""",
-             image="result-documents.png"),
-
-        dict(eyebrow="Responsible AI", title="Qwen reads and explains. The model decides.", body="""
+        dict(eyebrow="How it works", title="Qwen reads and explains. The model decides.", body=f"""
             <div class="flow">
-              <div class="card accent"><div class="k">Qwen-VL · reads</div><p>Fills in only what is printed;
+              <div class="card accent"><div class="k">Qwen-VL · reads</div><p>Fills in what is printed;
                 the clerk confirms every value</p></div>
-              <div class="card"><div class="k">Model + rule tables · decide</div><p>The chance of rejection,
-                the verdict, the reason, the checks</p></div>
-              <div class="card accent"><div class="k">Qwen · explains</div><p>One plain sentence from the
-                finished result</p></div>
+              <div class="card"><div class="k">Model + rules · decide</div><p>Risk, verdict, reason code,
+                insurer and document checks</p></div>
+              <div class="card accent"><div class="k">Qwen · explains</div><p>One plain sentence,
+                checked before it is shown</p></div>
             </div>
-            <ul class="tight">
-              <li>Pre-authorisation is <b>never</b> taken from a document — it is always asked</li>
-              <li>Any reply quoting a number it wasn’t given is <b>discarded</b> for a fixed template</li>
-              <li>No network? Type the bill; the template still works — the demo never breaks</li>
-            </ul>"""),
+            {ul([
+                "Asks only what the papers can’t settle — pre-authorisation is <b>always</b> asked",
+                f"<b>{v['mean_questions']:.1f}</b> questions on average, in <b>{v['distinct_question_orders']}</b> different orders",
+                "Ends with the fix, the official rejection code and a one-page printout",
+            ])}"""),
 
         dict(eyebrow="Results", title="Tested on claims it never saw", body=f"""
             <div class="stats">
@@ -158,19 +152,25 @@ def slides() -> list[dict]:
             <p class="note">{v['claims']} held-out simulated claims, used once. Verdict thresholds were fitted on a
             separate split, not chosen by hand.</p>"""),
 
+        dict(eyebrow="Business case", title="Everyone in the claim wins", body=f"""
+            <div class="cols">
+              <div class="card"><div class="k">Clinics</div>{ul(["Paid sooner", "Less rework", "Predictable cash flow"])}</div>
+              <div class="card"><div class="k">Insurers &amp; TPAs</div>{ul(["Cleaner claims", "Fewer appeals", "Lower admin cost"])}</div>
+              <div class="card"><div class="k">Patients</div>{ul(["Clinics keep accepting their insurance", "Care isn’t held up by paperwork"])}</div>
+            </div>
+            <p class="note"><b>How it earns (proposed):</b> licence to TPAs for their whole panel · clinic
+            subscription · national e-claims schemes</p>"""),
+
         dict(eyebrow="Honest about it", title="Limits today, and what comes next", body=f"""
             <div class="cols two">
               <div class="card"><div class="k">What it does not do</div>{ul([
-                  "Train on real claims — none are public; records are simulated, rules and codes are real",
+                  "Train on real claims — none are public; the rules and codes are real",
                   "Replace staff — it is a second check",
-                  "Read every photo perfectly — each value shows its quote to check",
                   "Submit claims or learn by itself",
-                  "Protect real patient data yet — no login",
               ])}</div>
               <div class="card accent"><div class="k">What we’d build next</div>{ul([
                   "Pilot with a clinic or TPA on real claims",
-                  "Per-insurer rules and models",
-                  "Urdu and regional-language interface",
+                  "Per-insurer rules — Jubilee’s first",
                   "Login, encryption, links to billing systems",
               ])}</div>
             </div>"""),
@@ -240,6 +240,16 @@ sup { font-size:.6em; color:var(--brand); font-weight:600; margin-left:2px; }
 .fact .l { font-size:17px; line-height:1.35; color:var(--ink2); margin-top:6px; }
 .inline-stats { font-size:19px; color:var(--muted); margin-top:10px; }
 .inline-stats b { font-family:'Instrument Serif', Georgia, serif; font-size:30px; color:var(--brand); font-weight:400; }
+.mt { margin-top: 30px; }
+.case { display:grid; grid-template-columns: 0.9fr 1.1fr; gap:36px; align-items:start; }
+.case .k { font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--brand); font-weight:600; margin-bottom:12px; }
+.path { padding-left:26px; } .path li { font-size:19px; line-height:1.4; color:var(--ink2); margin-bottom:11px; padding-left:4px; }
+.path li::marker { color:var(--brand); font-weight:600; }
+.map { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--rule); border-radius:16px; overflow:hidden; }
+.map th { text-align:left; font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--brand); padding:12px 16px; border-bottom:1px solid var(--rule); }
+.map td { font-size:17px; padding:9px 16px; border-bottom:1px solid var(--rule); color:var(--ink2); }
+.map td:last-child { color:var(--ink); font-weight:500; }
+.map tr.todo td { color:var(--muted); font-weight:400; font-style:italic; }
 .small { font-size:15px !important; color:var(--muted) !important; }
 .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; }
 .stat { background:var(--card); border:1px solid var(--rule); border-radius:18px; padding:32px 28px; }

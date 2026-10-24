@@ -50,6 +50,16 @@ sup { font-size:.6em; color:var(--brand); font-weight:600; margin-left:2px; }
 .fact .l { font-size:17px; line-height:1.35; color:var(--ink2); margin-top:6px; }
 .inline-stats { font-size:19px; color:var(--muted); margin-top:10px; }
 .inline-stats b { font-family:'Instrument Serif', Georgia, serif; font-size:30px; color:var(--brand); font-weight:400; }
+.mt { margin-top: 30px; }
+.case { display:grid; grid-template-columns: 0.9fr 1.1fr; gap:36px; align-items:start; }
+.case .k { font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--brand); font-weight:600; margin-bottom:12px; }
+.path { padding-left:26px; } .path li { font-size:19px; line-height:1.4; color:var(--ink2); margin-bottom:11px; padding-left:4px; }
+.path li::marker { color:var(--brand); font-weight:600; }
+.map { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--rule); border-radius:16px; overflow:hidden; }
+.map th { text-align:left; font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--brand); padding:12px 16px; border-bottom:1px solid var(--rule); }
+.map td { font-size:17px; padding:9px 16px; border-bottom:1px solid var(--rule); color:var(--ink2); }
+.map td:last-child { color:var(--ink); font-weight:500; }
+.map tr.todo td { color:var(--muted); font-weight:400; font-style:italic; }
 .small { font-size:15px !important; color:var(--muted) !important; }
 .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; }
 .stat { background:var(--card); border:1px solid var(--rule); border-radius:18px; padding:32px 28px; }
@@ -83,50 +93,51 @@ sup { font-size:.6em; color:var(--brand); font-weight:600; margin-left:2px; }
             <p class="lede">Catch the insurance-claim rejection <em>before</em> the claim is sent.</p>
             <p class="team">Mirza Ahsan Baig · Safee Akmal<span>Tasdeeq-e-Bima</span></p>
             </div><div class="shot"><img src="screenshots/landing.png"></div></section><section class="slide normal"><div class="content"><div class="eyebrow">The problem</div><h2>Claims get rejected for paperwork, not medicine</h2>
-            <div class="split">
-              <div><ul><li>Weeks after treatment, the claim bounces: <b>no pre-authorisation</b>, a <b>missed deadline</b>, <b>missing documents</b></li><li>The clinic reworks it and waits again for its money</li><li>Small clinics can’t absorb that — they stop taking insured patients</li></ul></div>
-              <aside class="card">
-                <div class="k">Pre-authorisation</div>
-                <p>Insurer approval needed <b>before</b> a planned treatment. Miss it and correct care
-                can still go unpaid.<sup>6</sup></p>
-              </aside>
-            </div></div><div class="sources">Sources: [6] American Medical Association</div><div class="foot">2</div></section><section class="slide normal"><div class="content"><div class="eyebrow">The scale</div><h2>A global problem, hardest where insurance is new</h2>
-            <div class="grid3">
-              <div class="fact"><div class="k">United States</div><div class="v">15%</div><div class="l">of claims to private insurers denied first time<sup>1</sup></div></div>
-              <div class="fact"><div class="k">United States</div><div class="v">$25.7B</div><div class="l">spent by providers fighting denials in 2023<sup>1</sup></div></div>
-              <div class="fact"><div class="k">United States</div><div class="v">86%</div><div class="l">of denials potentially avoidable<sup>2</sup></div></div>
-              <div class="fact"><div class="k">India</div><div class="v">71%</div><div class="l">of health-claim value actually paid, FY 2023-24<sup>3</sup></div></div>
-              <div class="fact"><div class="k">Sehat Card scheme</div><div class="v">5–8 months</div><div class="l">payment waits, blamed on incomplete documents<sup>4</sup></div></div>
-              <div class="fact"><div class="k">Kenya</div><div class="v">600+</div><div class="l">rural private hospitals stopped accepting the national cover<sup>5</sup></div></div>
-            </div></div><div class="sources">Sources: [1] Premier Inc. · [2] Becker’s Hospital Review · [3] Outlook Business · [4] Aaj News · [5] Business Daily Africa</div><div class="foot">3</div></section><section class="slide normal with-image"><div class="content"><div class="eyebrow">Our solution</div><h2>A spell-checker for insurance claims</h2>
+            <ul><li>Weeks after treatment the claim bounces: <b>no pre-authorisation</b>, <b>missing documents</b>, a <b>missed deadline</b></li><li>The clinic reworks it and waits again — small clinics stop taking insured patients</li></ul>
+            <div class="stats mt">
+              <div class="stat"><div class="v">15%</div><div class="l">of US private-insurer claims denied first time<sup>1</sup></div></div>
+              <div class="stat"><div class="v">$25.7B</div><div class="l">spent by US providers fighting denials (2023)<sup>1</sup></div></div>
+              <div class="stat"><div class="v">86%</div><div class="l">of denials potentially avoidable<sup>2</sup></div></div>
+              <div class="stat"><div class="v">71%</div><div class="l">of India’s health-claim value actually paid (FY24)<sup>3</sup></div></div>
+            </div></div><div class="sources">Sources: [1] Premier Inc. · [2] Becker’s Hospital Review · [3] Outlook Business</div><div class="foot">2</div></section><section class="slide normal"><div class="content"><div class="eyebrow">Case study · Jubilee Health Insurance, Kenya</div><h2>One insurer, every way a claim can fail</h2>
+            <div class="case">
+              <div>
+                <div class="k">The path every claim must survive</div>
+                <ol class="path">
+                  <li><b>Verify</b> the medical card and national ID</li>
+                  <li><b>Pre-authorise</b> 48 h before a planned admission<sup>4</sup></li>
+                  <li><b>Claim form</b> signed by patient and doctor</li>
+                  <li><b>Submit</b> every bill, report and summary in time</li>
+                  <li><b>Vetting</b>, then payment — if nothing is missing</li>
+                </ol>
+              </div>
+              <table class="map">
+                <tr><th>Jubilee can reject for…</th><th>Claim Check, before sending</th></tr>
+                <tr><td>No pre-authorisation</td><td>Asked first, every time</td></tr>
+                <tr><td>Incomplete documents</td><td>Flags missing papers</td></tr>
+                <tr><td>Discharge summary ≠ approval</td><td>Cross-checks the papers</td></tr>
+                <tr><td>Clinic not on the plan’s panel</td><td>Asks panel status</td></tr>
+                <tr><td>Service not covered by the plan</td><td>Plan-coverage check</td></tr>
+                <tr><td>Filed too late</td><td>Filing-deadline check</td></tr>
+                <tr class="todo"><td>Pre-existing condition</td><td>Not yet — roadmap</td></tr>
+              </table>
+            </div>
+            <p class="note">The cost of getting it wrong: Nairobi Hospital suspended Jubilee in 2020 over a
+            claimed <b>KSh 357 million</b> in unpaid claims dating back to 2018.<sup>5</sup></p></div><div class="sources">Sources: [4] Jubilee Insurance Kenya · [5] Business Daily Africa</div><div class="foot">3</div></section><section class="slide normal with-image"><div class="content"><div class="eyebrow">Our solution</div><h2>A spell-checker for insurance claims</h2>
             <div class="steps">
               <div><span>1</span><b>Photograph the papers</b><p>Qwen reads them; the clerk confirms</p></div>
               <div><span>2</span><b>Answer what they can’t</b><p>Three or four questions, chosen for this claim</p></div>
               <div><span>3</span><b>Fix before sending</b><p>Chance of rejection, the cause, the fix</p></div>
-            </div></div><div class="shot"><img src="screenshots/documents.png"></div><div class="foot">4</div></section><section class="slide normal"><div class="content"><div class="eyebrow">Business case</div><h2>Everyone in the claim wins</h2>
-            <div class="cols">
-              <div class="card"><div class="k">Clinics</div><ul><li>Paid sooner</li><li>Less rework</li><li>Predictable cash flow</li></ul></div>
-              <div class="card"><div class="k">Insurers &amp; TPAs</div><ul><li>Cleaner claims</li><li>Fewer appeals</li><li>Lower admin cost</li></ul></div>
-              <div class="card"><div class="k">Patients</div><ul><li>Clinics keep accepting their insurance</li><li>Care isn’t held up by paperwork</li></ul></div>
-            </div>
-            <p class="note"><b>How it could earn (proposed):</b> per-clinic subscription · licence to TPAs for
-            their provider panel · integration with national e-claims schemes</p></div><div class="foot">5</div></section><section class="slide normal with-image"><div class="content"><div class="eyebrow">How it works</div><h2>Reads the papers, asks the rest, says what to fix</h2>
-            <ul><li>Fills in what is printed, then asks what the papers can’t settle</li><li>Cross-checks the papers: a missing approval, an approval below the bill</li><li>Risk updates after every answer; stops once settled</li><li>The cause, the official rejection code, the fix — and a one-page printout</li></ul>
-            <p class="inline-stats"><b>3.6</b> questions on average ·
-            <b>55</b> different question orders</p></div><div class="shot"><img src="screenshots/result-documents.png"></div><div class="foot">6</div></section><section class="slide normal"><div class="content"><div class="eyebrow">Responsible AI</div><h2>Qwen reads and explains. The model decides.</h2>
+            </div></div><div class="shot"><img src="screenshots/documents.png"></div><div class="foot">4</div></section><section class="slide normal"><div class="content"><div class="eyebrow">How it works</div><h2>Qwen reads and explains. The model decides.</h2>
             <div class="flow">
-              <div class="card accent"><div class="k">Qwen-VL · reads</div><p>Fills in only what is printed;
+              <div class="card accent"><div class="k">Qwen-VL · reads</div><p>Fills in what is printed;
                 the clerk confirms every value</p></div>
-              <div class="card"><div class="k">Model + rule tables · decide</div><p>The chance of rejection,
-                the verdict, the reason, the checks</p></div>
-              <div class="card accent"><div class="k">Qwen · explains</div><p>One plain sentence from the
-                finished result</p></div>
+              <div class="card"><div class="k">Model + rules · decide</div><p>Risk, verdict, reason code,
+                insurer and document checks</p></div>
+              <div class="card accent"><div class="k">Qwen · explains</div><p>One plain sentence,
+                checked before it is shown</p></div>
             </div>
-            <ul class="tight">
-              <li>Pre-authorisation is <b>never</b> taken from a document — it is always asked</li>
-              <li>Any reply quoting a number it wasn’t given is <b>discarded</b> for a fixed template</li>
-              <li>No network? Type the bill; the template still works — the demo never breaks</li>
-            </ul></div><div class="foot">7</div></section><section class="slide normal"><div class="content"><div class="eyebrow">Results</div><h2>Tested on claims it never saw</h2>
+            <ul><li>Asks only what the papers can’t settle — pre-authorisation is <b>always</b> asked</li><li><b>3.6</b> questions on average, in <b>55</b> different orders</li><li>Ends with the fix, the official rejection code and a one-page printout</li></ul></div><div class="foot">5</div></section><section class="slide normal"><div class="content"><div class="eyebrow">Results</div><h2>Tested on claims it never saw</h2>
             <div class="stats">
               <div class="stat"><div class="v">89%</div><div class="l">of claims it cleared were accepted</div></div>
               <div class="stat"><div class="v">72%</div><div class="l">of rejections flagged before submission</div></div>
@@ -134,13 +145,20 @@ sup { font-size:.6em; color:var(--brand); font-weight:600; margin-left:2px; }
               <div class="stat"><div class="v">0.85</div><div class="l">AUC with every answer known (0.76 mid-check)</div></div>
             </div>
             <p class="note">362 held-out simulated claims, used once. Verdict thresholds were fitted on a
-            separate split, not chosen by hand.</p></div><div class="foot">8</div></section><section class="slide normal"><div class="content"><div class="eyebrow">Honest about it</div><h2>Limits today, and what comes next</h2>
+            separate split, not chosen by hand.</p></div><div class="foot">6</div></section><section class="slide normal"><div class="content"><div class="eyebrow">Business case</div><h2>Everyone in the claim wins</h2>
+            <div class="cols">
+              <div class="card"><div class="k">Clinics</div><ul><li>Paid sooner</li><li>Less rework</li><li>Predictable cash flow</li></ul></div>
+              <div class="card"><div class="k">Insurers &amp; TPAs</div><ul><li>Cleaner claims</li><li>Fewer appeals</li><li>Lower admin cost</li></ul></div>
+              <div class="card"><div class="k">Patients</div><ul><li>Clinics keep accepting their insurance</li><li>Care isn’t held up by paperwork</li></ul></div>
+            </div>
+            <p class="note"><b>How it earns (proposed):</b> licence to TPAs for their whole panel · clinic
+            subscription · national e-claims schemes</p></div><div class="foot">7</div></section><section class="slide normal"><div class="content"><div class="eyebrow">Honest about it</div><h2>Limits today, and what comes next</h2>
             <div class="cols two">
-              <div class="card"><div class="k">What it does not do</div><ul><li>Train on real claims — none are public; records are simulated, rules and codes are real</li><li>Replace staff — it is a second check</li><li>Read every photo perfectly — each value shows its quote to check</li><li>Submit claims or learn by itself</li><li>Protect real patient data yet — no login</li></ul></div>
-              <div class="card accent"><div class="k">What we’d build next</div><ul><li>Pilot with a clinic or TPA on real claims</li><li>Per-insurer rules and models</li><li>Urdu and regional-language interface</li><li>Login, encryption, links to billing systems</li></ul></div>
-            </div></div><div class="foot">9</div></section><section class="slide title with-image"><div class="content">
+              <div class="card"><div class="k">What it does not do</div><ul><li>Train on real claims — none are public; the rules and codes are real</li><li>Replace staff — it is a second check</li><li>Submit claims or learn by itself</li></ul></div>
+              <div class="card accent"><div class="k">What we’d build next</div><ul><li>Pilot with a clinic or TPA on real claims</li><li>Per-insurer rules — Jubilee’s first</li><li>Login, encryption, links to billing systems</li></ul></div>
+            </div></div><div class="foot">8</div></section><section class="slide title with-image"><div class="content">
             <div class="eyebrow">Claim Check · Tasdeeq-e-Bima</div>
             <h1 class="hero closing">Catch the rejection before you submit.</h1>
             <p class="lede">We’re looking for a <b>partner clinic or TPA</b> to pilot with real claims.</p>
             <p class="team">Mirza Ahsan Baig · Safee Akmal<span>Thank you</span></p>
-            </div><div class="shot"><img src="screenshots/result-clean-dark.png"></div></section><section class="slide normal"><div class="content"><div class="eyebrow">Sources</div><h2>Where the figures come from</h2><ol class='refs'><li>Premier Inc., “Claims Adjudication Costs Providers $25.7 Billion”, Feb 2025 (2023 data)<br><span>premierinc.com/newsroom/blog/claims-adjudication-costs-providers-25-7-billion</span></li><li>Becker’s Hospital Review, on the Change Healthcare 2020 Revenue Cycle Denials Index (102M claims, 1,500 hospitals)<br><span>beckershospitalreview.com/finance/86-of-denials-are-potentially-avoidable-strategies-to-better-prevent-manage-denials</span></li><li>Outlook Business, on the IRDAI Annual Report 2023-24, 30 Dec 2024<br><span>outlookbusiness.com/economy-and-policy/health-insurers-disallowed-claims-worth-rs-15100-crore-during-fy24</span></li><li>Aaj News, “More pain than relief for KP health card holders” (Baker Tilly audit), 22 Nov 2022<br><span>english.aaj.tv/news/30304857</span></li><li>Business Daily Africa, “Rural private hospitals reject SHA cover over Sh22bn debt”, 20 Feb 2025<br><span>businessdailyafrica.com/bd/corporate/health/rural-private-hospitals-reject-sha-cover-over-sh22bn-debt-4934984</span></li><li>American Medical Association, 2024 Prior Authorization Physician Survey<br><span>ama-assn.org/press-center/ama-press-releases/ama-survey-indicates-prior-authorization-wreaks-havoc-patient-care</span></li></ol><p class='note small'>Our own results: models/metadata.json and docs/model-card.md in the project repository (3,612 simulated claims, test split of 362).</p></div><div class="foot">11</div></section></body></html>
+            </div><div class="shot"><img src="screenshots/result-clean-dark.png"></div></section><section class="slide normal"><div class="content"><div class="eyebrow">Sources</div><h2>Where the figures come from</h2><ol class='refs'><li>Premier Inc., “Claims Adjudication Costs Providers $25.7 Billion”, Feb 2025 (2023 data)<br><span>premierinc.com/newsroom/blog/claims-adjudication-costs-providers-25-7-billion</span></li><li>Becker’s Hospital Review, on the Change Healthcare 2020 Revenue Cycle Denials Index (102M claims, 1,500 hospitals)<br><span>beckershospitalreview.com/finance/86-of-denials-are-potentially-avoidable-strategies-to-better-prevent-manage-denials</span></li><li>Outlook Business, on the IRDAI Annual Report 2023-24, 30 Dec 2024<br><span>outlookbusiness.com/economy-and-policy/health-insurers-disallowed-claims-worth-rs-15100-crore-during-fy24</span></li><li>Jubilee Insurance Kenya, CoverBora brochure (pre-authorisation terms)<br><span>jubileeinsurance.com/ke/wp-content/uploads/2024/01/CoverBora-Brochure.pdf</span></li><li>Business Daily Africa, “Jubilee Insurance, Nairobi Hospital in debt row”, June 2020<br><span>businessdailyafrica.com/bd/news/jubilee-insurance-nairobi-hospital-in-debt-row-2293534</span></li></ol><p class='note small'>Our own results: models/metadata.json and docs/model-card.md in the project repository (3,612 simulated claims, test split of 362).</p></div><div class="foot">10</div></section></body></html>
