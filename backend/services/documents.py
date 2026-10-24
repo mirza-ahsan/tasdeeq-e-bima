@@ -458,8 +458,9 @@ def interpret(raw: dict, predictor: Predictor, n_files: int, today: date) -> Rea
     letter = next((d for d in documents if d.type == "pre_auth_letter"), None)
     reference = entry("pre_auth_reference")
     if letter or reference:
-        evidence = (reference[1] if reference and reference[1]
-                    else "A pre-authorisation approval is among the documents.")
+        quote = reference[1] if reference and reference[1] else None
+        evidence = ("The documents include a pre-authorisation approval"
+                    + (f" (“{quote.rstrip('.')}”)." if quote else "."))
         hint = ReadValue("pre_auth_obtained", "yes", value_label("pre_auth_obtained", "yes"),
                          evidence, letter.index if letter else reference[2])
     else:
