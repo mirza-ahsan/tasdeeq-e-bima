@@ -72,120 +72,84 @@ def slides() -> list[dict]:
     base = meta["base_rejection_rate"]
 
     return [
-        dict(kind="title", body="""
-            <div class="eyebrow">Bano Qabil AI Hackathon</div>
-            <h1 class="hero">Claim Check</h1>
-            <p class="lede">Catch the insurance-claim rejection <em>before</em> the claim is sent.</p>
-            <p class="team">Mirza Ahsan Baig · Safee Akmal<span>Tasdeeq-e-Bima</span></p>
-            """, image="landing.png"),
-
-        dict(eyebrow="The problem", title="Claims get rejected for paperwork, not medicine", body=f"""
-            {ul([
-                "Weeks after treatment the claim bounces: <b>no pre-authorisation</b>, <b>missing "
-                "documents</b>, a <b>missed deadline</b>",
-                "The clinic reworks it and waits again — small clinics stop taking insured patients",
-            ])}
-            <div class="stats mt">
+        # --- the problem ---------------------------------------------------------
+        dict(eyebrow="Claim Check · The problem", title="Claims get rejected for paperwork, not medicine",
+             body=f"""
+            <p class="lede-row">No pre-authorisation · missing documents · missed deadlines</p>
+            <div class="stats">
               {stat("15%", "of US private-insurer claims denied first time", "1")}
-              {stat("$25.7B", "spent by US providers fighting denials (2023)", "1")}
+              {stat("$25.7B", "a year spent by US providers fighting denials", "1")}
               {stat("86%", "of denials potentially avoidable", "2")}
-              {stat("71%", "of India’s health-claim value actually paid (FY24)", "3")}
-            </div>""", sources=[1, 2, 3]),
-
-        dict(eyebrow="Case study · Jubilee Health Insurance, Kenya",
-             title="One insurer, every way a claim can fail", body="""
-            <div class="case">
-              <div>
-                <div class="k">The path every claim must survive</div>
-                <ol class="path">
-                  <li><b>Verify</b> the medical card and national ID</li>
-                  <li><b>Pre-authorise</b> 48 h before a planned admission<sup>4</sup></li>
-                  <li><b>Claim form</b> signed by patient and doctor</li>
-                  <li><b>Submit</b> every bill, report and summary in time</li>
-                  <li><b>Vetting</b>, then payment — if nothing is missing</li>
-                </ol>
-              </div>
-              <table class="map">
-                <tr><th>Jubilee can reject for…</th><th>Claim Check, before sending</th></tr>
-                <tr><td>No pre-authorisation</td><td>Asked first, every time</td></tr>
-                <tr><td>Incomplete documents</td><td>Flags missing papers</td></tr>
-                <tr><td>Discharge summary ≠ approval</td><td>Cross-checks the papers</td></tr>
-                <tr><td>Clinic not on the plan’s panel</td><td>Asks panel status</td></tr>
-                <tr><td>Service not covered by the plan</td><td>Plan-coverage check</td></tr>
-                <tr><td>Filed too late</td><td>Filing-deadline check</td></tr>
-                <tr class="todo"><td>Pre-existing condition</td><td>Not yet — roadmap</td></tr>
-              </table>
+              {stat("71%", "of India’s health-claim value actually paid", "3")}
             </div>
-            <p class="note">The cost of getting it wrong: Nairobi Hospital suspended Jubilee in 2020 over a
-            claimed <b>KSh 357 million</b> in unpaid claims dating back to 2018.<sup>5</sup></p>""",
-             sources=[4, 5]),
+            <p class="note">Small clinics wait weeks, rework the claim — or stop taking insured patients.</p>""",
+             sources=[1, 2, 3]),
 
-        dict(eyebrow="Our solution", title="A spell-checker for insurance claims", body="""
+        dict(eyebrow="The problem · Case study", title="Jubilee Health Insurance, Kenya", body="""
+            <table class="map">
+              <tr><th>A claim can be rejected for…</th><th>Claim Check catches it before sending</th></tr>
+              <tr><td>No pre-authorisation (due 48 h before admission)<sup>4</sup></td><td>Asked first, every time</td></tr>
+              <tr><td>Incomplete documents</td><td>Flags missing papers</td></tr>
+              <tr><td>Discharge summary doesn’t match the approval</td><td>Cross-checks the papers</td></tr>
+              <tr><td>Clinic not on the plan’s panel</td><td>Asks panel status</td></tr>
+              <tr><td>Service not covered by the plan</td><td>Plan-coverage check</td></tr>
+              <tr><td>Filed too late</td><td>Filing-deadline check</td></tr>
+            </table>
+            <p class="note">2020: Nairobi Hospital suspended Jubilee over a claimed <b>KSh 357 million</b>
+            in unpaid claims.<sup>5</sup></p>""", sources=[4, 5]),
+
+        # --- the solution --------------------------------------------------------
+        dict(eyebrow="The solution", title="A spell-checker for insurance claims", body="""
             <div class="steps">
               <div><span>1</span><b>Photograph the papers</b><p>Qwen reads them; the clerk confirms</p></div>
-              <div><span>2</span><b>Answer what they can’t</b><p>Three or four questions, chosen for this claim</p></div>
-              <div><span>3</span><b>Fix before sending</b><p>Chance of rejection, the cause, the fix</p></div>
+              <div><span>2</span><b>Answer 3–4 questions</b><p>Only what the papers can’t settle</p></div>
+              <div><span>3</span><b>Fix before sending</b><p>Risk, the cause, the fix, a printout</p></div>
             </div>""", image="documents.png"),
 
-        dict(eyebrow="How it works", title="Qwen reads and explains. The model decides.", body=f"""
+        dict(eyebrow="The solution · Why trust it", title="Qwen reads and explains. The model decides.",
+             body=f"""
             <div class="flow">
-              <div class="card accent"><div class="k">Qwen-VL · reads</div><p>Fills in what is printed;
-                the clerk confirms every value</p></div>
-              <div class="card"><div class="k">Model + rules · decide</div><p>Risk, verdict, reason code,
-                insurer and document checks</p></div>
-              <div class="card accent"><div class="k">Qwen · explains</div><p>One plain sentence,
-                checked before it is shown</p></div>
+              <div class="card accent"><div class="k">Qwen-VL reads</div><p>Every value shown with its source</p></div>
+              <div class="card"><div class="k">Model + rules decide</div><p>Risk, reason code, checks</p></div>
+              <div class="card accent"><div class="k">Qwen explains</div><p>One sentence, verified</p></div>
             </div>
-            {ul([
-                "Asks only what the papers can’t settle — pre-authorisation is <b>always</b> asked",
-                f"<b>{v['mean_questions']:.1f}</b> questions on average, in <b>{v['distinct_question_orders']}</b> different orders",
-                "Ends with the fix, the official rejection code and a one-page printout",
-            ])}"""),
-
-        dict(eyebrow="Results", title="Tested on claims it never saw", body=f"""
-            <div class="stats">
+            <div class="stats three">
               {stat(pct(1 - b['low']['rejection_rate']), "of claims it cleared were accepted")}
-              {stat(pct(v['rejections_flagged']), "of rejections flagged before submission")}
-              {stat(pct(b['high']['rejection_rate']), f"of “high risk” claims were rejected (average {pct(base)})")}
-              {stat(f"{m['test_auc_full']:.2f}", f"AUC with every answer known ({m['test_auc_partial']:.2f} mid-check)")}
+              {stat(pct(v['rejections_flagged']), "of rejections caught before sending")}
+              {stat(f"{v['mean_questions']:.1f}", "questions per claim")}
             </div>
-            <p class="note">{v['claims']} held-out simulated claims, used once. Verdict thresholds were fitted on a
-            separate split, not chosen by hand.</p>"""),
+            <p class="note small">Measured on {v['claims']} simulated claims the model never saw.</p>"""),
 
-        dict(eyebrow="Business case", title="Everyone in the claim wins", body=f"""
+        # --- the business ---------------------------------------------------------
+        dict(eyebrow="The business · Who gains", title="Everyone in the claim wins", body=f"""
             <div class="cols">
-              <div class="card"><div class="k">Clinics</div>{ul(["Paid sooner", "Less rework", "Predictable cash flow"])}</div>
+              <div class="card"><div class="k">Clinics</div>{ul(["Paid sooner", "Less rework", "Steady cash flow"])}</div>
               <div class="card"><div class="k">Insurers &amp; TPAs</div>{ul(["Cleaner claims", "Fewer appeals", "Lower admin cost"])}</div>
-              <div class="card"><div class="k">Patients</div>{ul(["Clinics keep accepting their insurance", "Care isn’t held up by paperwork"])}</div>
+              <div class="card"><div class="k">Patients</div>{ul(["Clinics keep accepting insurance", "No paperwork delays"])}</div>
             </div>
-            <p class="note"><b>How it earns (proposed):</b> licence to TPAs for their whole panel · clinic
-            subscription · national e-claims schemes</p>"""),
+            <p class="note">Costs little to run: a small model on an ordinary server, a few short Qwen calls per claim.</p>"""),
 
-        dict(eyebrow="Honest about it", title="Limits today, and what comes next", body=f"""
+        dict(eyebrow="The business · How it earns", title="Two revenue streams", body="""
             <div class="cols two">
-              <div class="card"><div class="k">What it does not do</div>{ul([
-                  "Train on real claims — none are public; the rules and codes are real",
-                  "Replace staff — it is a second check",
-                  "Submit claims or learn by itself",
-              ])}</div>
-              <div class="card accent"><div class="k">What we’d build next</div>{ul([
-                  "Pilot with a clinic or TPA on real claims",
-                  "Per-insurer rules — Jubilee’s first",
-                  "Login, encryption, links to billing systems",
-              ])}</div>
-            </div>"""),
+              <div class="card accent"><div class="k">TPA licence</div>{tpa}</div>
+              <div class="card"><div class="k">Clinic subscription</div>{clinic}</div>
+            </div>
+            <p class="note"><b>Next:</b> a 3-month pilot with a TPA or clinic group — rejections measured
+            before and after.</p>""".replace("{tpa}", ul([
+                "One contract covers every clinic on the panel",
+                "Built into their portal, with their own rules",
+                "Fee per claim checked, or per panel",
+            ])).replace("{clinic}", ul([
+                "Free: a few checks a month",
+                "Paid: about $15–20 a month (proposed)",
+                "Costs less than one rejected claim",
+            ]))),
 
-        dict(kind="title", body="""
-            <div class="eyebrow">Claim Check · Tasdeeq-e-Bima</div>
-            <h1 class="hero closing">Catch the rejection before you submit.</h1>
-            <p class="lede">We’re looking for a <b>partner clinic or TPA</b> to pilot with real claims.</p>
-            <p class="team">Mirza Ahsan Baig · Safee Akmal<span>Thank you</span></p>
-            """, image="result-clean-dark.png"),
-
-        dict(eyebrow="Sources", title="Where the figures come from", body="<ol class='refs'>" + "".join(
+        dict(eyebrow="References", title="Sources", body="<ol class='refs'>" + "".join(
             f"<li>{e(t)}<br><span>{e(u)}</span></li>" for t, u in SOURCES) + "</ol>"
-            + f"<p class='note small'>Our own results: models/metadata.json and docs/model-card.md in the "
-              f"project repository ({meta['n_claims']:,} simulated claims, test split of {v['claims']}).</p>"),
+            + f"<p class='note small'>Our results: models/metadata.json and docs/model-card.md in the project "
+              f"repository ({meta['n_claims']:,} simulated claims; {v['claims']} held out for testing). "
+              "Prices are proposals to be tested in a pilot.</p>"),
     ]
 
 CSS = """
@@ -241,6 +205,8 @@ sup { font-size:.6em; color:var(--brand); font-weight:600; margin-left:2px; }
 .inline-stats { font-size:19px; color:var(--muted); margin-top:10px; }
 .inline-stats b { font-family:'Instrument Serif', Georgia, serif; font-size:30px; color:var(--brand); font-weight:400; }
 .mt { margin-top: 30px; }
+.lede-row { font-size:24px; color:var(--ink2); margin:-14px 0 30px; }
+.stats.three { grid-template-columns:repeat(3,1fr); margin-top:26px; }
 .case { display:grid; grid-template-columns: 0.9fr 1.1fr; gap:36px; align-items:start; }
 .case .k { font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--brand); font-weight:600; margin-bottom:12px; }
 .path { padding-left:26px; } .path li { font-size:19px; line-height:1.4; color:var(--ink2); margin-bottom:11px; padding-left:4px; }
@@ -285,7 +251,7 @@ def render(deck: list[dict]) -> str:
     for i, s in enumerate(deck, 1):
         kind = s.get("kind", "normal")
         img = (f'<div class="shot"><img src="screenshots/{s["image"]}"></div>' if s.get("image") else "")
-        foot = "" if kind in ("title", "divider") else f'<div class="foot">{i}</div>'
+        foot = "" if kind in ("title", "divider") else f'<div class="foot">Claim Check · Mirza Ahsan Baig &amp; Safee Akmal · {i}</div>'
         src = f'<div class="sources">{cite(*s["sources"])}</div>' if s.get("sources") else ""
         if kind == "title":
             inner = f'<div class="content">{s["body"]}</div>{img}'
