@@ -72,8 +72,15 @@ def slides() -> list[dict]:
     base = meta["base_rejection_rate"]
 
     return [
+        dict(kind="title", body="""
+            <div class="eyebrow">Bano Qabil AI Hackathon</div>
+            <h1 class="hero">Claim Check</h1>
+            <p class="lede">Catch the insurance-claim rejection <em>before</em> the claim is sent.</p>
+            <p class="team">Mirza Ahsan Baig · Safee Akmal<span>Tasdeeq-e-Bima</span></p>
+            """, image="landing.png"),
+
         # --- the problem ---------------------------------------------------------
-        dict(eyebrow="Claim Check · The problem", title="Claims get rejected for paperwork, not medicine",
+        dict(eyebrow="The problem", title="Claims get rejected for paperwork, not medicine",
              body=f"""
             <p class="lede-row">No pre-authorisation · missing documents · missed deadlines</p>
             <div class="stats">
