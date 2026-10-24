@@ -49,7 +49,7 @@ from backend.services.adaptive import (FEATURE_LABELS, MAX_QUESTIONS, MIN_QUESTI
                                        NUMBER_LIMITS, VALUE_LABELS, AdaptiveEngine,
                                        InvalidAnswer, Question, Step, feature_label,
                                        validate_answer, value_label)
-from backend.services.checks import build_checks
+from backend.services.checks import build_checks, document_checks
 from backend.services.documents import (DocumentError, Reading, ReaderUnavailable,
                                         ReadingStore, ReadValue, read_documents)
 from backend.services.explain_qwen import ClaimPrediction, FlaggedField, explain
@@ -286,10 +286,12 @@ def _unsure(session: Session) -> list[FieldRef]:
     return [FieldRef(feature=f, label=feature_label(f)) for f in session.skipped]
 
 
-def _checks(engine: AdaptiveEngine, answers: dict) -> list[CheckOut]:
+def _checks(engine: AdaptiveEngine, answers: dict, reading: Reading | None = None) -> list[CheckOut]:
     derived = engine.p.derived(answers)
-    return [CheckOut(id=c.id, label=c.label, status=c.status, detail=c.detail)
-            for c in build_checks(answers, derived, engine.p.ref)]
+    checks = build_checks(answers, derived, engine.p.ref)
+    if reading is not None:
+        checks += document_checks(answers, derived, reading)
+    return [CheckOut(id=c.id, label=c.label, status=c.status, detail=c.detail) for c in checks]
 
 
 def _bands(engine: AdaptiveEngine) -> BandsOut:
@@ -308,7 +310,7 @@ def _step_out(session: Session, step: Step, engine: AdaptiveEngine) -> StepOut:
         n_answered=step.n_answered, min_questions=MIN_QUESTIONS, max_questions=MAX_QUESTIONS,
         question=_question_out(step.question, session.reading), stop_reason=step.stop_reason,
         patient=_patient(session.answers), claim=claim, answered=answered,
-        checks=_checks(engine, session.answers), last_change=session.last_change,
+        checks=_checks(engine, session.answers, session.reading), last_change=session.last_change,
         document_questions=[_question_out(engine.question_for(f, session.answers))
                             for f in session.order if f in session.from_documents],
         documents=_documents(session), unsure=_unsure(session))
@@ -571,7 +573,7 @@ def get_result(session_id: str, request: Request) -> ResultOut:
         alternatives = reasons[1:] if carc else []
         fix_first = reasons[0] if reasons and step.risk_band == "low" else None
 
-        checks = _checks(engine, answers)
+        checks = _checks(engine, answers, session.reading)
         lead = carc or fix_first
         prediction = ClaimPrediction(
             rejection_probability=step.probability, risk_band=step.risk_band,

@@ -20,8 +20,10 @@ import backend.services.documents as documents
 from backend.config import DashScopeConfig
 from backend.main import app
 from backend.services.adaptive import AdaptiveEngine
-from backend.services.documents import (DocumentError, ReaderUnavailable, interpret,
-                                        prepare_pages, read_documents)
+from backend.services.checks import document_checks
+from backend.services.documents import (DocumentError, DocumentSummary, Reading,
+                                        ReaderUnavailable, interpret, prepare_pages,
+                                        read_documents)
 
 TODAY = date(2026, 10, 24)
 
@@ -270,3 +272,75 @@ def test_without_qwen_the_endpoint_says_to_enter_the_bill_by_hand(monkeypatch):
     monkeypatch.setattr(main.read_limiter, "per_minute", 100_000)
     r = TestClient(app).post("/api/documents/read", json=upload(png()))
     assert r.status_code == 503 and "by hand" in r.json()["detail"]
+
+
+# --- checks across the documents --------------------------------------------------
+
+
+SURGERY = {"patient_age": 44, "patient_gender": "F", "procedure_category": "minor_surgery",
+           "claim_amount_pkr": 85_000}
+NEEDS_APPROVAL = {"pre_auth_required_for_procedure": 1}
+
+
+def reading_of(*docs: DocumentSummary) -> Reading:
+    return Reading(id="r", context={}, facts={}, hints={}, documents=list(docs))
+
+
+def by_id(checks):
+    return {c.id: c for c in checks}
+
+
+BILL = DocumentSummary(1, "bill", "Itemised bill", date="2026-10-12", amount_pkr=85_000,
+                       patient_age=44, patient_gender="F")
+
+
+def test_missing_papers_are_named_but_only_warned_about():
+    checks = by_id(document_checks(SURGERY, NEEDS_APPROVAL, reading_of(BILL)))
+    assert checks["doc_required"].status == "warn"
+    assert "discharge summary" in checks["doc_required"].detail
+    assert "pre-authorisation approval" in checks["doc_required"].detail
+
+
+def test_an_approval_for_less_than_was_billed_is_a_problem():
+    letter = DocumentSummary(2, "pre_auth_letter", "Pre-authorisation approval",
+                             date="2026-10-08", amount_pkr=70_000, patient_age=44, patient_gender="F")
+    checks = by_id(document_checks(SURGERY, NEEDS_APPROVAL, reading_of(BILL, letter)))
+    assert checks["doc_amount"].status == "issue"
+    assert "PKR 15,000 above" in checks["doc_amount"].detail
+    assert checks["doc_dates"].status == "ok"
+    assert checks["doc_patient"].status == "ok"
+
+
+def test_papers_that_disagree_about_the_patient_or_dates_are_caught():
+    late = DocumentSummary(2, "pre_auth_letter", "Pre-authorisation approval",
+                           date="2026-10-20", amount_pkr=90_000, patient_age=45, patient_gender="F")
+    checks = by_id(document_checks(SURGERY, NEEDS_APPROVAL, reading_of(BILL, late)))
+    assert checks["doc_patient"].status == "issue" and "45 years" in checks["doc_patient"].detail
+    assert checks["doc_dates"].status == "issue" and "after the treatment" in checks["doc_dates"].detail
+    assert checks["doc_amount"].status == "ok"
+
+
+def test_a_document_problem_reaches_the_verdict_without_inventing_a_reason(reader, monkeypatch):
+    reply = json.loads(json.dumps(REPLY))
+    reply["documents"][1] = {"file": 2, "type": "pre_auth_letter", "date": "2026-09-30",
+                             "amount_pkr": 70000, "patient_age": 44, "patient_gender": "F"}
+    monkeypatch.setattr(documents, "_call_model", lambda *a: json.dumps(reply))
+    monkeypatch.setattr(main.result_limiter, "per_minute", 100_000)
+    body = reader.post("/api/documents/read", json=upload(png(), png())).json()
+    assert next(h for h in body["hints"])["value"] == "yes"
+    start = {c["feature"]: c["value"] for c in body["context"]}
+    step = reader.post("/api/session/start", json={
+        **start, "reading_id": body["reading_id"],
+        "use_facts": [f["feature"] for f in body["facts"]]}).json()
+    sid = step["session_id"]
+    while not step["done"]:
+        q = step["question"]
+        value = "yes" if q["feature"] == "pre_auth_obtained" else (
+            q["options"][0]["value"] if q["kind"] == "choice" else 0)
+        step = reader.post(f"/api/session/{sid}/answer",
+                           json={"feature": q["feature"], "value": value}).json()
+    result = reader.get(f"/api/session/{sid}/result").json()
+    doc = {c["id"]: c for c in result["checks"]}
+    assert doc["doc_amount"]["status"] == "issue"
+    assert result["carc"] is None or result["carc"]["code"] != "198"     # never invented
+    assert "ready to submit" not in result["explanation"]["text"].lower()

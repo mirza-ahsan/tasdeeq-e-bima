@@ -134,6 +134,11 @@ If risk_band is "high" or "medium" and there is a likely_rejection_reason:
 all in this one sentence.
 - Sentence 2: give its staff_action as the one thing to do before submitting.
 
+If risk_band is "high" or "medium", there is no likely_rejection_reason, and \
+rule_check_issues is not empty:
+- Sentence 1: state the risk and the first rule_check_issue as the main concern.
+- Sentence 2: say to resolve it before submitting.
+
 If risk_band is "high" or "medium", there is no likely_rejection_reason, and a flagged \
 field has effect "increases_risk":
 - Sentence 1: state the risk and name that field as what drives it.
@@ -148,12 +153,18 @@ If risk_band is "low" and there is a fix_before_submitting:
 - Sentence 1: begin "The rejection risk is low at N%, but" and name the problem.
 - Sentence 2: give its staff_action. Do not say the claim is ready to submit.
 
-If risk_band is "low", there is no fix_before_submitting, and unconfirmed_fields is empty:
+If risk_band is "low", there is no fix_before_submitting, and rule_check_issues is not empty:
+- Sentence 1: begin "The rejection risk is low at N%, but" and state the first rule_check_issue.
+- Sentence 2: say to resolve it before submitting. Do not say the claim is ready to submit.
+
+If risk_band is "low", there is no fix_before_submitting, rule_check_issues is empty, and \
+unconfirmed_fields is empty:
 - Sentence 1: begin "The rejection risk is low at N%" and name the strongest field \
 supporting that if there is one.
 - Sentence 2: say the claim looks ready to submit. Do not invent a task.
 
-If risk_band is "low", there is no fix_before_submitting, and unconfirmed_fields is not empty:
+If risk_band is "low", there is no fix_before_submitting, rule_check_issues is empty, and \
+unconfirmed_fields is not empty:
 - Sentence 1: begin "The rejection risk is low at N%".
 - Sentence 2: say to confirm the details in unconfirmed_fields before submitting. Do not \
 say the claim is ready to submit.

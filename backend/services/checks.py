@@ -14,10 +14,15 @@ told so. The value is in the facts they would otherwise have to look up.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from datetime import date
+from typing import TYPE_CHECKING, Literal
 
 from backend.services.adaptive import value_label
-from ml.features import (AMOUNT_EXCESSIVE_RATIO, ELECTIVE_CATEGORIES, TIER_EXCLUSIONS)
+from ml.features import (AMOUNT_EXCESSIVE_RATIO, ELECTIVE_CATEGORIES, PRE_AUTH_CATEGORIES,
+                         TIER_EXCLUSIONS)
+
+if TYPE_CHECKING:
+    from backend.services.documents import Reading
 
 Status = Literal["ok", "warn", "issue", "pending"]
 
@@ -144,3 +149,104 @@ def build_checks(answers: dict, derived: dict, ref: dict) -> list[Check]:
         diagnosis_check(answers, derived),
         patient_check(answers, derived),
     ]
+
+
+# ---------------------------------------------------------------------------
+# Documents: the same kind of deterministic rule, applied to what was read from them.
+# The KP Sehat Card audit blamed late payments on incomplete documents, so these look
+# for exactly that: a missing paper, an approval for less than was billed, papers that
+# disagree about the patient or the dates. They inform the clerk; they never change the
+# model's estimate, and they never name a reason code (a reason is a fact, and only
+# `defect_codes` decides those).
+# ---------------------------------------------------------------------------
+
+# Procedures billed as day-care or inpatient work, whose claims need treatment notes.
+NEEDS_DISCHARGE_SUMMARY = PRE_AUTH_CATEGORIES
+DATE_SLACK_DAYS = 3     # an admission a day or two before the billed date is normal
+
+
+def _day(text: str | None) -> date | None:
+    try:
+        return date.fromisoformat(text) if text else None
+    except ValueError:
+        return None
+
+
+def required_documents_check(answers: dict, derived: dict, reading: "Reading") -> Check:
+    have = {d.type for d in reading.documents}
+    need = {"bill": "the itemised bill"}
+    if answers.get("procedure_category") in NEEDS_DISCHARGE_SUMMARY:
+        need["discharge_summary"] = "a discharge summary"
+    if derived.get("pre_auth_required_for_procedure") == 1:
+        need["pre_auth_letter"] = "the pre-authorisation approval"
+    missing = [label for kind, label in need.items() if kind not in have]
+    if missing:
+        return Check("doc_required", "Required documents", "warn",
+                     "Not among the uploaded documents: " + ", ".join(missing)
+                     + ". Attach " + ("it" if len(missing) == 1 else "them") + " to the claim.")
+    return Check("doc_required", "Required documents", "ok",
+                 "Everything this claim needs is among the documents.")
+
+
+def approved_amount_check(answers: dict, reading: "Reading") -> Check | None:
+    letter = next((d for d in reading.documents
+                   if d.type == "pre_auth_letter" and d.amount_pkr), None)
+    billed = answers.get("claim_amount_pkr")
+    if letter is None or billed is None:
+        return None
+    if billed > letter.amount_pkr:
+        return Check("doc_amount", "Within the approved amount", "issue",
+                     f"Billed PKR {billed:,} but approved for PKR {letter.amount_pkr:,}: "
+                     f"PKR {billed - letter.amount_pkr:,} above the approval. Ask the insurer "
+                     "for a revised approval first.")
+    return Check("doc_amount", "Within the approved amount", "ok",
+                 f"Billed PKR {billed:,}, within the PKR {letter.amount_pkr:,} approved.")
+
+
+def same_patient_check(answers: dict, reading: "Reading") -> Check | None:
+    age, sex = answers.get("patient_age"), answers.get("patient_gender")
+    clashes = []
+    for d in reading.documents:
+        if d.patient_age is not None and age is not None and d.patient_age != age:
+            clashes.append(f"the {d.label.lower()} says {d.patient_age} years, the claim {age}")
+        if d.patient_gender and sex and d.patient_gender != sex:
+            clashes.append(f"the {d.label.lower()} says "
+                           f"{value_label('patient_gender', d.patient_gender).lower()}")
+    checked = any(d.patient_age is not None or d.patient_gender for d in reading.documents)
+    if clashes:
+        return Check("doc_patient", "Same patient throughout", "issue",
+                     "The documents disagree: " + "; ".join(clashes) + ".")
+    if checked:
+        return Check("doc_patient", "Same patient throughout", "ok",
+                     "Age and sex agree across the documents and the claim.")
+    return None
+
+
+def dates_check(reading: "Reading") -> Check | None:
+    by_type = {d.type: _day(d.date) for d in reading.documents if _day(d.date)}
+    treated = by_type.get("bill")
+    if treated is None:
+        return None
+    approved = by_type.get("pre_auth_letter")
+    if approved and approved > treated:
+        return Check("doc_dates", "Dates agree", "issue",
+                     f"The approval is dated {approved:%d %b %Y}, after the treatment on "
+                     f"{treated:%d %b %Y}. Pre-authorisation has to come first.")
+    admitted = by_type.get("discharge_summary")
+    if admitted and abs((admitted - treated).days) > DATE_SLACK_DAYS:
+        return Check("doc_dates", "Dates agree", "warn",
+                     f"The discharge summary is dated {admitted:%d %b %Y}, the bill "
+                     f"{treated:%d %b %Y}. Check that they are for the same stay.")
+    if approved or admitted:
+        compared = " and ".join(w for w, d in (("approval", approved), ("discharge", admitted)) if d)
+        return Check("doc_dates", "Dates agree", "ok",
+                     f"The treatment and {compared} dates are consistent.")
+    return None
+
+
+def document_checks(answers: dict, derived: dict, reading: "Reading") -> list[Check]:
+    checks = [required_documents_check(answers, derived, reading),
+              approved_amount_check(answers, reading),
+              same_patient_check(answers, reading),
+              dates_check(reading)]
+    return [c for c in checks if c is not None]
