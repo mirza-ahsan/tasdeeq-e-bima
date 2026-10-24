@@ -33,6 +33,10 @@ function headline(result: Result): { title: string; sub: string } {
   if (result.fix_first) {
     return { title: "Low risk — fix one thing first", sub: "The claim is in good shape apart from the problem below." };
   }
+  // A rule or document problem the model cannot see still keeps a claim from being "ready".
+  if (result.checks.some((c) => c.status === "issue")) {
+    return { title: "Low risk — resolve the flagged problem", sub: "The model sees little risk, but a rule check below found something to fix first." };
+  }
   const open = result.unsure?.length ?? 0;
   if (open) {
     return {
@@ -137,6 +141,8 @@ export function ResultView({
   const tone = BAND_TONE[result.risk_band];
   const { title, sub } = headline(result);
   const action = result.carc ?? result.fix_first;
+  const problem = result.checks.find((c) => c.status === "issue");
+  const unsure = result.unsure ?? [];
   const heading = useRef<HTMLHeadingElement>(null);
   // The verdict takes focus when it arrives, so keyboard and screen-reader users land on it.
   useEffect(() => heading.current?.focus({ preventScroll: true }), []);
@@ -187,6 +193,24 @@ export function ResultView({
                 {result.fix_first && (
                   <p className="mt-1 text-[13px] text-ink-2">{result.fix_first.plain_english}</p>
                 )}
+              </div>
+            ) : problem ? (
+              // A rule or document problem with no reason code behind it still comes first.
+              <div className="mt-4 rounded-2xl border border-line-strong bg-surface-2 p-5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-2">
+                  Do this before submitting
+                </span>
+                <p className="mt-1.5 text-[15px] font-medium leading-relaxed text-ink">{problem.detail}</p>
+                <p className="mt-1 text-[12.5px] text-ink-3">{problem.label} · found by a rule check, not the model</p>
+              </div>
+            ) : unsure.length > 0 ? (
+              <div className="mt-4 rounded-2xl border border-line-strong bg-surface-2 p-5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-2">
+                  Confirm before submitting
+                </span>
+                <p className="mt-1.5 text-[15px] font-medium leading-relaxed text-ink">
+                  {unsure.map((u) => u.label).join(", ")} — left as not sure. Answer {unsure.length === 1 ? "it" : "them"} in the list below.
+                </p>
               </div>
             ) : (
               result.risk_band === "low" && (
@@ -244,7 +268,9 @@ export function ResultView({
             </p>
           ) : (
             <p className="mt-3 text-[14px] leading-relaxed text-ink-2">
-              {result.risk_band === "low"
+              {problem
+                ? `None: no reason code applies. The problem shown above comes from the “${problem.label}” check, not the model.`
+                : result.risk_band === "low"
                 ? "None shown. No known rejection trigger was found, and naming a reason for a claim that looks clean would be inventing a problem."
                 : "None named. No specific defect was found in what was answered, and the tool names a reason only when the claim actually shows one."}
             </p>

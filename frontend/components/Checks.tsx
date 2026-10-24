@@ -14,6 +14,22 @@ const STATUS: Record<CheckStatus, { icon: typeof IconCheckCircle; color: string;
  * by mistake.
  */
 export function Checks({ checks, layout = "list" }: { checks: Check[]; layout?: "list" | "grid" }) {
+  // Checks on the uploaded documents get their own group under the insurer rules.
+  const rules = checks.filter((c) => !c.id.startsWith("doc_"));
+  const documents = checks.filter((c) => c.id.startsWith("doc_"));
+  if (documents.length === 0) return <CheckList checks={rules} layout={layout} />;
+  return (
+    <div className="space-y-5">
+      <CheckList checks={rules} layout={layout} />
+      <div>
+        <span className="eyebrow">The documents</span>
+        <div className="mt-3"><CheckList checks={documents} layout={layout} /></div>
+      </div>
+    </div>
+  );
+}
+
+function CheckList({ checks, layout }: { checks: Check[]; layout: "list" | "grid" }) {
   const order: CheckStatus[] = ["issue", "warn", "ok", "pending"];
   const sorted = [...checks].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
   return (
