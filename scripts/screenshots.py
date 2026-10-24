@@ -28,6 +28,28 @@ async def run_demo(page, label: str) -> None:
     await page.wait_for_timeout(1200)   # let the bars finish growing
 
 
+# Answers for the document demo's remaining questions: the clean, ordinary ones.
+TIDY = ("Yes, obtained", "All complete", "No, first submission", "Yes, active", "Yes, on the panel")
+
+
+async def answer_until_verdict(page) -> None:
+    """Answer each question with the tidy option, until the verdict appears."""
+    for _ in range(10):
+        await page.wait_for_timeout(1200)
+        if await page.get_by_text("What moved the estimate").count():
+            break
+        options = page.get_by_role("listitem").get_by_role("button")
+        names = await options.all_inner_texts()
+        pick = next((i for i, n in enumerate(names) for t in TIDY if t in n), 0)
+        if names:
+            await options.nth(pick).click()
+        elif await page.get_by_role("textbox").count():
+            await page.get_by_role("textbox").first.fill("0")
+            await page.get_by_role("button", name="Continue").click()
+    await page.get_by_text("What moved the estimate").wait_for(timeout=60_000)
+    await page.wait_for_timeout(1200)
+
+
 async def main(url: str, chromium: str | None) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     async with async_playwright() as p:
@@ -57,6 +79,23 @@ async def main(url: str, chromium: str | None) -> None:
         await risky.goto(url)
         await run_demo(risky, "Risky example")
         await risky.screenshot(path=OUT / "result-risky.png")
+
+        docs = await page()
+        await docs.goto(url)
+        await docs.get_by_role("button", name="Check a claim").click()
+        await docs.get_by_role("button", name="Sample: surgery, no approval letter").click()
+        await docs.get_by_text("Read by Qwen").wait_for(timeout=60_000)
+        await docs.wait_for_timeout(400)
+        await docs.screenshot(path=OUT / "documents.png")
+
+        approved = await page()
+        await approved.goto(url)
+        await approved.get_by_role("button", name="Check a claim").click()
+        await approved.get_by_role("button", name="Sample: surgery, approved").click()
+        await approved.get_by_text("Read by Qwen").wait_for(timeout=60_000)
+        await approved.get_by_role("button", name="Start the check").click()
+        await answer_until_verdict(approved)
+        await approved.screenshot(path=OUT / "result-documents.png")
 
         clean = await page("dark")
         await clean.goto(url)

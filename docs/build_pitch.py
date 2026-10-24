@@ -108,10 +108,10 @@ def slides() -> list[dict]:
 
         dict(eyebrow="Our solution", title="A spell-checker for insurance claims", body="""
             <div class="steps">
-              <div><span>1</span><b>Enter the bill</b><p>Patient, procedure, amount</p></div>
-              <div><span>2</span><b>Answer 3–4 questions</b><p>Only the ones that matter for this claim</p></div>
+              <div><span>1</span><b>Photograph the papers</b><p>Qwen reads them; the clerk confirms</p></div>
+              <div><span>2</span><b>Answer what they can’t</b><p>Usually one to three questions</p></div>
               <div><span>3</span><b>Fix before sending</b><p>Chance of rejection, the cause, the fix</p></div>
-            </div>""", image="check.png"),
+            </div>""", image="documents.png"),
 
         dict(eyebrow="Business case", title="Everyone in the claim wins", body=f"""
             <div class="cols">
@@ -122,29 +122,30 @@ def slides() -> list[dict]:
             <p class="note"><b>How it could earn (proposed):</b> per-clinic subscription · licence to TPAs for
             their provider panel · integration with national e-claims schemes</p>"""),
 
-        dict(eyebrow="How it works", title="Asks what matters, then says what to fix", body=f"""
+        dict(eyebrow="How it works", title="Reads the papers, asks the rest, says what to fix", body=f"""
             {ul([
-                "Picks the question that tells it the most about <b>this</b> claim",
-                "Pre-authorisation first when the procedure needs it",
+                "Fills in what is printed; asks only what the papers can’t settle",
+                "Cross-checks the papers: a missing approval, an approval below the bill",
                 "Risk updates after every answer; stops once settled",
-                "Shows the cause, six insurer-rule checks, the official rejection code and the fix",
+                "The cause, the official rejection code, the fix — and a one-page printout",
             ])}
             <p class="inline-stats"><b>{v['mean_questions']:.1f}</b> questions on average ·
             <b>{v['distinct_question_orders']}</b> different question orders</p>""",
-             image="result-risky.png"),
+             image="result-documents.png"),
 
-        dict(eyebrow="Responsible AI", title="The model decides. Qwen only explains.", body="""
+        dict(eyebrow="Responsible AI", title="Qwen reads and explains. The model decides.", body="""
             <div class="flow">
-              <div class="card"><div class="k">Machine-learning model</div><p>Computes the chance of rejection,
-                the verdict and the likely reason</p></div>
-              <div class="card"><div class="k">Insurer rule tables</div><p>Check pre-auth, deadlines, tariffs
-                and coverage — no AI involved</p></div>
-              <div class="card accent"><div class="k">Qwen · Alibaba Cloud</div><p>Writes one plain sentence from
-                the finished result</p></div>
+              <div class="card accent"><div class="k">Qwen-VL · reads</div><p>Fills in only what is printed;
+                the clerk confirms every value</p></div>
+              <div class="card"><div class="k">Model + rule tables · decide</div><p>The chance of rejection,
+                the verdict, the reason, the checks</p></div>
+              <div class="card accent"><div class="k">Qwen · explains</div><p>One plain sentence from the
+                finished result</p></div>
             </div>
             <ul class="tight">
-              <li>Any reply quoting a number it wasn’t given is <b>discarded</b> and a fixed template is shown</li>
-              <li>No network? The template still works — the demo never breaks</li>
+              <li>Pre-authorisation is <b>never</b> taken from a document — it is always asked</li>
+              <li>Any reply quoting a number it wasn’t given is <b>discarded</b> for a fixed template</li>
+              <li>No network? Type the bill; the template still works — the demo never breaks</li>
             </ul>"""),
 
         dict(eyebrow="Results", title="Tested on claims it never saw", body=f"""
@@ -162,6 +163,7 @@ def slides() -> list[dict]:
               <div class="card"><div class="k">What it does not do</div>{ul([
                   "Train on real claims — none are public; records are simulated, rules and codes are real",
                   "Replace staff — it is a second check",
+                  "Read every photo perfectly — each value shows its quote to check",
                   "Submit claims or learn by itself",
                   "Protect real patient data yet — no login",
               ])}</div>
